@@ -155,13 +155,10 @@ adminCrud('/maintenance-admin', 'maintenance_tickets', [
 adminCrud('/documents', 'documents', [
   'property_id',
   'tenant_id',
-  'type',
-  'title',
-  'issue_date',
+  'name',
+  'doc_type',
   'expiry_date',
-  'status',
-  'file_url',
-  'notes'
+  'file_url'
 ], 'Document');
 
 adminCrud('/expenses', 'expenses', [
