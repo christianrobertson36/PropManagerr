@@ -32,7 +32,7 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: |
-            ghcr.io/christianrobertson36/propmanagerr-web:v1
+            ghcr.io/christianrobertson36/propmanagerr-web:v10
 
       - name: Build and push api
         uses: docker/build-push-action@v6
@@ -41,4 +41,4 @@ jobs:
           file: ./server/Dockerfile
           push: true
           tags: |
-            ghcr.io/christianrobertson36/propmanagerr-api:v1
+            ghcr.io/christianrobertson36/propmanagerr-api:v10
