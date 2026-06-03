@@ -1,38 +1,37 @@
-services:
-  db:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: propmanager
-      POSTGRES_USER: propmanager
-      POSTGRES_PASSWORD: change-this-db-password
-    volumes:
-      - propmanager_db:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U propmanager -d propmanager"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+name: Build Docker Images
 
-  api:
-    image: ghcr.io/christianrobertson36/propmanagerr-api:latest
-    restart: unless-stopped
-    environment:
-      PORT: 3000
-      DATABASE_URL: postgres://propmanager:change-this-db-password@db:5432/propmanager
-      JWT_SECRET: change-this-long-random-secret
-      CORS_ORIGIN: http://YOUR-TRUENAS-IP:8080
-    depends_on:
-      db:
-        condition: service_healthy
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
 
-  web:
-    image: ghcr.io/christianrobertson36/propmanagerr-web:latest
-    restart: unless-stopped
-    ports:
-      - "8080:80"
-    depends_on:
-      - api
+permissions:
+  contents: read
+  packages: write
 
-volumes:
-  propmanager_db:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: christianrobertson36
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push web
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/christianrobertson36/propmanagerr-web:latest
+
+      - name: Build and push api
+        uses: docker/build-push-action@v6
+        with:
+          context: ./server
+          push: true
+          tags: ghcr.io/christianrobertson36/propmanagerr-api:latest
