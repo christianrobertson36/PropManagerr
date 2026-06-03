@@ -119,18 +119,15 @@ adminCrud('/properties', 'properties', [
   'property_type'
 ], 'Property');
 
-adminCrud('/tenants', 'tenants', [
-  'property_id',
-  'name',
-  'email',
-  'phone',
-  'tenancy_start',
-  'tenancy_end',
-  'rent_amount',
-  'deposit_amount',
-  'deposit_scheme',
-  'notes'
-], 'Tenant');
+insert into tenants (
+  property_id,
+  name,
+  email,
+  phone,
+  tenancy_start,
+  tenancy_end,
+  ...
+)
 
 adminCrud('/rent-payments', 'rent_payments', [
   'tenant_id',
