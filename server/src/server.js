@@ -1,3 +1,4 @@
+import { initDatabase } from './initDb.js';
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
@@ -67,4 +68,7 @@ app.patch('/rent-payments/:id', requireAuth, requireAdmin, async (req, res) => {
 });
 
 const port = Number(process.env.PORT || 3000);
+
+await initDatabase();
+
 app.listen(port, () => console.log(`PropManager API listening on ${port}`));
