@@ -1,7 +1,27 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Building2, ClipboardList, FileText, Home, LogOut, Receipt, ShieldCheck, Users, Wrench } from 'lucide-react';
+import {
+  AlertTriangle,
+  Building2,
+  ClipboardList,
+  FileText,
+  Home,
+  LogOut,
+  Receipt,
+  ShieldCheck,
+  Users,
+  Wrench,
+} from 'lucide-react';
 import { api } from './api';
-import type { DashboardData, Page, PaymentStatus, Property, PropertyStatus, RentPayment, User } from './types';
+import type {
+  DashboardData,
+  Page,
+  PaymentStatus,
+  Property,
+  PropertyStatus,
+  RentPayment,
+  Tenant,
+  User,
+} from './types';
 
 function daysUntil(dateStr: string | null): number | null {
   if (!dateStr) return null;
@@ -13,7 +33,12 @@ function dateOnly(value: string | null | undefined): string {
   return value.slice(0, 10);
 }
 
-const pageConfig: { page: Page; label: string; icon: React.ComponentType<{ className?: string }>; adminOnly?: boolean }[] = [
+const pageConfig: {
+  page: Page;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  adminOnly?: boolean;
+}[] = [
   { page: 'dashboard', label: 'Dashboard', icon: Home },
   { page: 'properties', label: 'Properties', icon: Building2, adminOnly: true },
   { page: 'tenants', label: 'Tenants', icon: Users, adminOnly: true },
@@ -34,6 +59,7 @@ function Login({ onLogin }: { onLogin: (user: User) => void }) {
     event.preventDefault();
     setLoading(true);
     setError('');
+
     try {
       const result = await api.login(email, password);
       localStorage.setItem('pm_token', result.token);
@@ -46,48 +72,66 @@ function Login({ onLogin }: { onLogin: (user: User) => void }) {
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
-      <form onSubmit={submit} className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8 space-y-5">
+    <div className="min-h-screen grid place-items-center bg-slate-100 p-4">
+      <form onSubmit={submit} className="w-full max-w-md rounded-2xl bg-white p-8 shadow-xl space-y-4">
         <div className="flex items-center gap-3">
-          <div className="h-11 w-11 rounded-xl bg-emerald-600 flex items-center justify-center">
-            <Building2 className="text-white" />
-          </div>
+          <Building2 className="text-emerald-600" />
           <div>
             <h1 className="text-2xl font-bold text-slate-900">PropManager UK</h1>
             <p className="text-sm text-slate-500">Landlord and tenant portal</p>
           </div>
         </div>
 
-        {error && <p className="rounded-lg bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</p>}
+        {error && (
+          <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700 flex gap-2">
+            <AlertTriangle className="w-4 h-4" />
+            {error}
+          </p>
+        )}
 
         <label className="block text-sm font-medium text-slate-700">
           Email
-          <input className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" value={email} onChange={e => setEmail(e.target.value)} />
+          <input
+            className="mt-1 w-full rounded-lg border px-3 py-2"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+          />
         </label>
 
         <label className="block text-sm font-medium text-slate-700">
           Password
-          <input className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" type="password" value={password} onChange={e => setPassword(e.target.value)} />
+          <input
+            type="password"
+            className="mt-1 w-full rounded-lg border px-3 py-2"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+          />
         </label>
 
-        <button disabled={loading} className="w-full rounded-lg bg-emerald-600 text-white py-2.5 font-semibold hover:bg-emerald-700 disabled:opacity-60">
+        <button className="w-full rounded-lg bg-emerald-600 py-2 font-semibold text-white">
           {loading ? 'Signing in...' : 'Sign in'}
         </button>
       </form>
-    </main>
+    </div>
   );
 }
 
-function Stat({ label, value, icon: Icon }: { label: string; value: string; icon: React.ComponentType<{ className?: string }> }) {
+function Stat({
+  label,
+  value,
+  icon: Icon,
+}: {
+  label: string;
+  value: string;
+  icon: React.ComponentType<{ className?: string }>;
+}) {
   return (
-    <div className="rounded-xl bg-white border border-slate-200 p-5 shadow-sm">
-      <div className="flex justify-between">
-        <div>
-          <p className="text-xs uppercase tracking-wide text-slate-500 font-semibold">{label}</p>
-          <p className="text-2xl font-bold text-slate-900 mt-1">{value}</p>
-        </div>
-        <Icon className="text-emerald-600" />
+    <div className="rounded-xl bg-white p-5 shadow-sm flex items-center justify-between">
+      <div>
+        <p className="text-sm text-slate-500">{label}</p>
+        <p className="text-2xl font-bold text-slate-900">{value}</p>
       </div>
+      <Icon className="text-emerald-600" />
     </div>
   );
 }
@@ -104,72 +148,68 @@ function Dashboard({ data, user }: { data: DashboardData; user: User }) {
   return (
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-4">
-        <Stat label="Rent received" value={`£${paid.toLocaleString()}`} icon={Receipt} />
-        <Stat label="Outstanding" value={`£${outstanding.toLocaleString()}`} icon={AlertTriangle} />
+        <Stat label="Properties" value={String(data.properties.length)} icon={Building2} />
+        <Stat label="Rent paid" value={`£${paid}`} icon={Receipt} />
+        <Stat label="Outstanding" value={`£${outstanding}`} icon={AlertTriangle} />
         <Stat label="Open repairs" value={String(openRepairs)} icon={Wrench} />
-        <Stat label={user.role === 'admin' ? 'Properties' : 'My home'} value={String(data.properties.length)} icon={Building2} />
       </div>
 
-      <section className="rounded-xl bg-white border border-slate-200 p-5">
-        <h2 className="font-semibold text-slate-900 mb-3">Compliance reminders</h2>
-        <div className="space-y-2">
-          {expiring.length === 0 ? (
-            <p className="text-sm text-slate-500">No documents expiring in the next 90 days.</p>
-          ) : (
-            expiring.map(d => {
+      <section className="rounded-xl bg-white p-5 shadow-sm">
+        <h2 className="font-bold text-slate-900 mb-3">Compliance reminders</h2>
+        {expiring.length === 0 ? (
+          <p className="text-sm text-slate-500">No documents expiring in the next 90 days.</p>
+        ) : (
+          <div className="space-y-2">
+            {expiring.map(d => {
               const days = daysUntil(d.expiry_date);
               return (
-                <div key={d.id} className="flex justify-between rounded-lg bg-slate-50 p-3 text-sm">
+                <div key={d.id} className="rounded-lg border p-3 flex justify-between">
                   <span>{d.name}</span>
-                  <strong className={days !== null && days < 0 ? 'text-red-600' : 'text-amber-600'}>
+                  <span className="text-sm text-red-600">
                     {days !== null && days < 0 ? `${Math.abs(days)} days overdue` : `${days} days left`}
-                  </strong>
+                  </span>
                 </div>
               );
-            })
-          )}
-        </div>
+            })}
+          </div>
+        )}
       </section>
     </div>
   );
 }
 
-function DataTable({ title, rows }: { title: string; rows: Record<string, React.ReactNode>[] }) {
+function DataTable({ title, rows }: { title: string; rows: Record<string, any>[] }) {
   const keys = rows[0] ? Object.keys(rows[0]) : [];
 
   return (
-    <section className="rounded-xl bg-white border border-slate-200 overflow-hidden">
-      <div className="p-5 border-b">
-        <h2 className="font-semibold text-slate-900">{title}</h2>
-      </div>
+    <section className="rounded-xl bg-white p-5 shadow-sm overflow-x-auto">
+      <h2 className="font-bold text-slate-900 mb-4">{title}</h2>
 
       {rows.length === 0 ? (
-        <p className="p-5 text-sm text-slate-500">No records found.</p>
+        <p className="text-sm text-slate-500">No records found.</p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-slate-500">
-              <tr>
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left border-b">
+              {keys.map(k => (
+                <th key={k} className="py-2 pr-4 capitalize">
+                  {k.replace(/_/g, ' ')}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={i} className="border-b last:border-0">
                 {keys.map(k => (
-                  <th key={k} className="text-left p-3 font-semibold capitalize">
-                    {k.replace(/_/g, ' ')}
-                  </th>
+                  <td key={k} className="py-3 pr-4">
+                    {r[k]}
+                  </td>
                 ))}
               </tr>
-            </thead>
-            <tbody>
-              {rows.map((r, i) => (
-                <tr key={i} className="border-t">
-                  {keys.map(k => (
-                    <td key={k} className="p-3 text-slate-700">
-                      {r[k]}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            ))}
+          </tbody>
+        </table>
       )}
     </section>
   );
@@ -182,29 +222,59 @@ function Maintenance({ data, refresh }: { data: DashboardData; refresh: () => vo
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    await api.createTicket({ title, description, property_id: propertyId, urgency: 'medium' });
+    await api.createTicket({
+      title,
+      description,
+      property_id: propertyId,
+      urgency: 'medium',
+    });
     setTitle('');
     setDescription('');
     refresh();
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
-      <DataTable title="Repair tickets" rows={data.maintenanceTickets.map(t => ({
-        title: t.title,
-        property: t.property?.address || t.property_id,
-        urgency: t.urgency,
-        status: t.status,
-      }))} />
+    <div className="space-y-4">
+      <DataTable
+        title="Maintenance tickets"
+        rows={data.maintenanceTickets.map(t => ({
+          title: t.title,
+          property: t.property?.address || t.property_id,
+          urgency: t.urgency,
+          status: t.status,
+        }))}
+      />
 
-      <form onSubmit={submit} className="rounded-xl bg-white border border-slate-200 p-5 space-y-3 h-fit">
-        <h2 className="font-semibold">Report a repair</h2>
-        <input required className="w-full rounded-lg border px-3 py-2" placeholder="Issue title" value={title} onChange={e => setTitle(e.target.value)} />
-        <textarea required className="w-full rounded-lg border px-3 py-2" placeholder="Describe the problem" value={description} onChange={e => setDescription(e.target.value)} />
-        <select className="w-full rounded-lg border px-3 py-2" value={propertyId} onChange={e => setPropertyId(e.target.value)}>
-          {data.properties.map(p => <option key={p.id} value={p.id}>{p.address}</option>)}
+      <form onSubmit={submit} className="rounded-xl bg-white p-5 shadow-sm space-y-3">
+        <h2 className="font-bold text-slate-900">Report a repair</h2>
+        <input
+          required
+          className="w-full rounded-lg border px-3 py-2"
+          placeholder="Title"
+          value={title}
+          onChange={e => setTitle(e.target.value)}
+        />
+        <textarea
+          required
+          className="w-full rounded-lg border px-3 py-2"
+          placeholder="Description"
+          value={description}
+          onChange={e => setDescription(e.target.value)}
+        />
+        <select
+          className="w-full rounded-lg border px-3 py-2"
+          value={propertyId}
+          onChange={e => setPropertyId(e.target.value)}
+        >
+          {data.properties.map(p => (
+            <option key={p.id} value={p.id}>
+              {p.address}
+            </option>
+          ))}
         </select>
-        <button className="w-full rounded-lg bg-emerald-600 text-white py-2 font-semibold">Submit</button>
+        <button className="w-full rounded-lg bg-emerald-600 text-white py-2 font-semibold">
+          Submit
+        </button>
       </form>
     </div>
   );
@@ -226,13 +296,26 @@ export default function App() {
   const [propertyBedrooms, setPropertyBedrooms] = useState('');
   const [propertyType, setPropertyType] = useState('');
 
+  const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
+  const [showTenantForm, setShowTenantForm] = useState(false);
+  const [tenantName, setTenantName] = useState('');
+  const [tenantEmail, setTenantEmail] = useState('');
+  const [tenantPhone, setTenantPhone] = useState('');
+  const [tenantPropertyId, setTenantPropertyId] = useState('');
+  const [tenantLeaseStart, setTenantLeaseStart] = useState('');
+  const [tenantLeaseEnd, setTenantLeaseEnd] = useState('');
+  const [tenantPaymentStatus, setTenantPaymentStatus] = useState<PaymentStatus>('pending');
+
   const [editingPayment, setEditingPayment] = useState<RentPayment | null>(null);
   const [editAmount, setEditAmount] = useState('');
   const [editDueDate, setEditDueDate] = useState('');
   const [editPaidDate, setEditPaidDate] = useState('');
   const [editStatus, setEditStatus] = useState<PaymentStatus>('pending');
 
-  const visiblePages = useMemo(() => pageConfig.filter(p => user?.role === 'admin' || !p.adminOnly), [user]);
+  const visiblePages = useMemo(
+    () => pageConfig.filter(p => user?.role === 'admin' || !p.adminOnly),
+    [user]
+  );
 
   async function load() {
     try {
@@ -305,6 +388,69 @@ export default function App() {
     }
   }
 
+  function startAddTenant() {
+    setEditingTenant(null);
+    setTenantName('');
+    setTenantEmail('');
+    setTenantPhone('');
+    setTenantPropertyId(data?.properties[0]?.id || '');
+    setTenantLeaseStart('');
+    setTenantLeaseEnd('');
+    setTenantPaymentStatus('pending');
+    setShowTenantForm(true);
+  }
+
+  function startEditTenant(tenant: Tenant) {
+    setEditingTenant(tenant);
+    setTenantName(tenant.name || '');
+    setTenantEmail(tenant.email || '');
+    setTenantPhone(tenant.phone || '');
+    setTenantPropertyId(tenant.property_id || '');
+    setTenantLeaseStart(dateOnly(tenant.lease_start));
+    setTenantLeaseEnd(dateOnly(tenant.lease_end));
+    setTenantPaymentStatus(tenant.payment_status || 'pending');
+    setShowTenantForm(true);
+  }
+
+  async function saveTenant(e: React.FormEvent) {
+    e.preventDefault();
+
+    const payload = {
+      name: tenantName,
+      email: tenantEmail,
+      phone: tenantPhone,
+      property_id: tenantPropertyId || null,
+      lease_start: tenantLeaseStart || null,
+      lease_end: tenantLeaseEnd || null,
+      payment_status: tenantPaymentStatus,
+    };
+
+    try {
+      if (editingTenant) {
+        await api.updateTenant(editingTenant.id, payload);
+      } else {
+        await api.createTenant(payload);
+      }
+
+      setShowTenantForm(false);
+      setEditingTenant(null);
+      await load();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Save failed');
+    }
+  }
+
+  async function deleteTenant(id: string) {
+    if (!confirm('Delete this tenant?')) return;
+
+    try {
+      await api.deleteTenant(id);
+      await load();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Delete failed');
+    }
+  }
+
   function startEditPayment(payment: RentPayment) {
     setEditingPayment(payment);
     setEditAmount(String(payment.amount));
@@ -345,10 +491,16 @@ export default function App() {
 
   useEffect(() => {
     const token = localStorage.getItem('pm_token');
-    if (token) api.me().then(r => {
-      setUser(r.user);
-      load();
-    }).catch(() => localStorage.removeItem('pm_token'));
+
+    if (token) {
+      api
+        .me()
+        .then(r => {
+          setUser(r.user);
+          load();
+        })
+        .catch(() => localStorage.removeItem('pm_token'));
+    }
   }, []);
 
   useEffect(() => {
@@ -356,10 +508,15 @@ export default function App() {
   }, [user]);
 
   if (!user) return <Login onLogin={setUser} />;
-  if (!data) return <div className="min-h-screen grid place-items-center text-slate-600">Loading PropManager...</div>;
 
-  const content = page === 'dashboard' ? <Dashboard data={data} user={user} />
-    : page === 'properties' ? (
+  if (!data) {
+    return <div className="min-h-screen grid place-items-center text-slate-600">Loading PropManager...</div>;
+  }
+
+  const content =
+    page === 'dashboard' ? (
+      <Dashboard data={data} user={user} />
+    ) : page === 'properties' ? (
       <div className="space-y-4">
         <button
           onClick={startAddProperty}
@@ -368,81 +525,154 @@ export default function App() {
           Add Property
         </button>
 
-        <DataTable title="Properties" rows={data.properties.map(p => ({
-          address: p.address,
-          city: p.city,
-          postcode: p.postcode,
-          type: p.property_type,
-          bedrooms: p.bedrooms,
-          rent: `£${p.monthly_rent}`,
-          status: p.status,
-          actions: (
-            <div className="flex gap-2">
-              <button
-                onClick={() => startEditProperty(p)}
-                className="rounded bg-slate-700 px-3 py-1 text-xs font-semibold text-white hover:bg-slate-800"
-              >
-                Edit
-              </button>
-              <button
-                onClick={() => deleteProperty(p.id)}
-                className="rounded bg-red-600 px-3 py-1 text-xs font-semibold text-white hover:bg-red-700"
-              >
-                Delete
-              </button>
-            </div>
-          ),
-        }))} />
+        <DataTable
+          title="Properties"
+          rows={data.properties.map(p => ({
+            address: p.address,
+            city: p.city,
+            postcode: p.postcode,
+            type: p.property_type,
+            bedrooms: p.bedrooms,
+            rent: `£${p.monthly_rent}`,
+            status: p.status,
+            actions: (
+              <div className="flex gap-2">
+                <button
+                  onClick={() => startEditProperty(p)}
+                  className="rounded bg-slate-700 px-3 py-1 text-xs font-semibold text-white hover:bg-slate-800"
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={() => deleteProperty(p.id)}
+                  className="rounded bg-red-600 px-3 py-1 text-xs font-semibold text-white hover:bg-red-700"
+                >
+                  Delete
+                </button>
+              </div>
+            ),
+          }))}
+        />
       </div>
-    )
-    : page === 'tenants' ? <DataTable title="Tenants" rows={data.tenants.map(t => ({ name: t.name, email: t.email, phone: t.phone, property: t.property?.address || '-', status: t.payment_status }))} />
-    : page === 'rent' ? <DataTable title="Rent payments" rows={data.rentPayments.map(p => ({
-      tenant: p.tenant?.name || p.tenant_id,
-      property: p.property?.address || p.property_id,
-      amount: `£${p.amount}`,
-      due: dateOnly(p.due_date),
-      paid: dateOnly(p.paid_date) || '-',
-      status: p.status,
-      actions: user.role === 'admin' ? (
-        <div className="flex gap-2">
-          <button
-            onClick={() => startEditPayment(p)}
-            className="rounded bg-slate-700 px-3 py-1 text-xs font-semibold text-white hover:bg-slate-800"
-          >
-            Edit
-          </button>
-          <button
-            onClick={() => deleteRentPayment(p.id)}
-            className="rounded bg-red-600 px-3 py-1 text-xs font-semibold text-white hover:bg-red-700"
-          >
-            Delete
-          </button>
-        </div>
-      ) : null,
-    }))} />
-    : page === 'maintenance' ? <Maintenance data={data} refresh={load} />
-    : page === 'documents' ? <DataTable title="Documents & compliance" rows={data.documents.map(d => ({ name: d.name, type: d.doc_type, property: d.property?.address || d.property_id, expiry: d.expiry_date || '-', file: d.file_url ? 'Uploaded' : 'Not uploaded' }))} />
-    : page === 'expenses' ? <DataTable title="Expenses" rows={data.expenses.map(e => ({ date: e.date, category: e.category, property: e.property?.address || 'General', amount: `£${e.amount}`, description: e.description }))} />
-    : <DataTable title="Admin tools" rows={[
-      { feature: 'Role based access', status: 'Enabled' },
-      { feature: 'Manual rent tracking', status: 'Enabled' },
-      { feature: 'Audit log schema', status: 'Included' },
-      { feature: 'TrueNAS Docker Compose', status: 'Included' },
-    ]} />;
+    ) : page === 'tenants' ? (
+      <div className="space-y-4">
+        <button
+          onClick={startAddTenant}
+          className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+        >
+          Add Tenant
+        </button>
+
+        <DataTable
+          title="Tenants"
+          rows={data.tenants.map(t => ({
+            name: t.name,
+            email: t.email,
+            phone: t.phone,
+            property: t.property?.address || '-',
+            lease_start: dateOnly(t.lease_start) || '-',
+            lease_end: dateOnly(t.lease_end) || '-',
+            status: t.payment_status,
+            actions: (
+              <div className="flex gap-2">
+                <button
+                  onClick={() => startEditTenant(t)}
+                  className="rounded bg-slate-700 px-3 py-1 text-xs font-semibold text-white hover:bg-slate-800"
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={() => deleteTenant(t.id)}
+                  className="rounded bg-red-600 px-3 py-1 text-xs font-semibold text-white hover:bg-red-700"
+                >
+                  Delete
+                </button>
+              </div>
+            ),
+          }))}
+        />
+      </div>
+    ) : page === 'rent' ? (
+      <DataTable
+        title="Rent payments"
+        rows={data.rentPayments.map(p => ({
+          tenant: p.tenant?.name || p.tenant_id,
+          property: p.property?.address || p.property_id,
+          amount: `£${p.amount}`,
+          due: dateOnly(p.due_date),
+          paid: dateOnly(p.paid_date) || '-',
+          status: p.status,
+          actions:
+            user.role === 'admin' ? (
+              <div className="flex gap-2">
+                <button
+                  onClick={() => startEditPayment(p)}
+                  className="rounded bg-slate-700 px-3 py-1 text-xs font-semibold text-white hover:bg-slate-800"
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={() => deleteRentPayment(p.id)}
+                  className="rounded bg-red-600 px-3 py-1 text-xs font-semibold text-white hover:bg-red-700"
+                >
+                  Delete
+                </button>
+              </div>
+            ) : null,
+        }))}
+      />
+    ) : page === 'maintenance' ? (
+      <Maintenance data={data} refresh={load} />
+    ) : page === 'documents' ? (
+      <DataTable
+        title="Documents & compliance"
+        rows={data.documents.map(d => ({
+          name: d.name,
+          type: d.doc_type,
+          property: d.property?.address || d.property_id,
+          expiry: d.expiry_date || '-',
+          file: d.file_url ? 'Uploaded' : 'Not uploaded',
+        }))}
+      />
+    ) : page === 'expenses' ? (
+      <DataTable
+        title="Expenses"
+        rows={data.expenses.map(e => ({
+          date: e.date,
+          category: e.category,
+          property: e.property?.address || 'General',
+          amount: `£${e.amount}`,
+          description: e.description,
+        }))}
+      />
+    ) : (
+      <DataTable
+        title="Admin tools"
+        rows={[
+          { feature: 'Role based access', status: 'Enabled' },
+          { feature: 'Manual rent tracking', status: 'Enabled' },
+          { feature: 'Audit log schema', status: 'Included' },
+          { feature: 'TrueNAS Docker Compose', status: 'Included' },
+        ]}
+      />
+    );
 
   return (
     <div className="min-h-screen bg-slate-100 flex">
       <aside className="w-64 bg-slate-950 text-white hidden md:flex flex-col">
         <div className="p-5 flex items-center gap-3 border-b border-slate-800">
           <Building2 className="text-emerald-400" />
-          <strong>PropManager UK V6</strong>
+          <strong>PropManager UK V8</strong>
         </div>
+
         <nav className="p-3 space-y-1 flex-1">
           {visiblePages.map(({ page: p, label, icon: Icon }) => (
             <button
               key={p}
               onClick={() => setPage(p)}
-              className={`w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm ${page === p ? 'bg-emerald-600' : 'text-slate-300 hover:bg-slate-800'}`}
+              className={`w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm ${
+                page === p ? 'bg-emerald-600' : 'text-slate-300 hover:bg-slate-800'
+              }`}
             >
               <Icon className="w-4 h-4" />
               {label}
@@ -454,9 +684,14 @@ export default function App() {
       <main className="flex-1">
         <header className="bg-white border-b px-5 py-4 flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold text-slate-900">{pageConfig.find(p => p.page === page)?.label}</h1>
-            <p className="text-sm text-slate-500">Signed in as {user.name} ({user.role})</p>
+            <h1 className="text-xl font-bold text-slate-900">
+              {pageConfig.find(p => p.page === page)?.label}
+            </h1>
+            <p className="text-sm text-slate-500">
+              Signed in as {user.name} ({user.role})
+            </p>
           </div>
+
           <button
             onClick={() => {
               localStorage.removeItem('pm_token');
@@ -470,6 +705,7 @@ export default function App() {
         </header>
 
         {error && <p className="m-5 rounded-lg bg-red-50 text-red-700 p-3">{error}</p>}
+
         <div className="p-5">{content}</div>
       </main>
 
@@ -495,6 +731,54 @@ export default function App() {
 
             <div className="flex justify-end gap-2 pt-2">
               <button type="button" onClick={() => setShowPropertyForm(false)} className="rounded-lg border px-4 py-2 text-sm">
+                Cancel
+              </button>
+              <button type="submit" className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
+                Save
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {showTenantForm && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4">
+          <form onSubmit={saveTenant} className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl space-y-4">
+            <h2 className="text-lg font-bold text-slate-900">
+              {editingTenant ? 'Edit tenant' : 'Add tenant'}
+            </h2>
+
+            <input required className="w-full rounded-lg border px-3 py-2" placeholder="Name" value={tenantName} onChange={e => setTenantName(e.target.value)} />
+            <input required type="email" className="w-full rounded-lg border px-3 py-2" placeholder="Email" value={tenantEmail} onChange={e => setTenantEmail(e.target.value)} />
+            <input className="w-full rounded-lg border px-3 py-2" placeholder="Phone" value={tenantPhone} onChange={e => setTenantPhone(e.target.value)} />
+
+            <select className="w-full rounded-lg border px-3 py-2" value={tenantPropertyId} onChange={e => setTenantPropertyId(e.target.value)}>
+              <option value="">No property assigned</option>
+              {data.properties.map(p => (
+                <option key={p.id} value={p.id}>
+                  {p.address}
+                </option>
+              ))}
+            </select>
+
+            <label className="block text-sm font-medium text-slate-700">
+              Lease start
+              <input type="date" className="mt-1 w-full rounded-lg border px-3 py-2" value={tenantLeaseStart} onChange={e => setTenantLeaseStart(e.target.value)} />
+            </label>
+
+            <label className="block text-sm font-medium text-slate-700">
+              Lease end
+              <input type="date" className="mt-1 w-full rounded-lg border px-3 py-2" value={tenantLeaseEnd} onChange={e => setTenantLeaseEnd(e.target.value)} />
+            </label>
+
+            <select className="w-full rounded-lg border px-3 py-2" value={tenantPaymentStatus} onChange={e => setTenantPaymentStatus(e.target.value as PaymentStatus)}>
+              <option value="pending">Pending</option>
+              <option value="paid">Paid</option>
+              <option value="overdue">Overdue</option>
+            </select>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button type="button" onClick={() => setShowTenantForm(false)} className="rounded-lg border px-4 py-2 text-sm">
                 Cancel
               </button>
               <button type="submit" className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
