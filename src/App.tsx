@@ -1,11 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Building2, ClipboardList, FileText, Home, LogOut, Receipt, ShieldCheck, Users, Wrench } from 'lucide-react';
 import { api } from './api';
-import type { DashboardData, Page, User } from './types';
+import type { DashboardData, Page, PaymentStatus, RentPayment, User } from './types';
 
 function daysUntil(dateStr: string | null): number | null {
   if (!dateStr) return null;
   return Math.ceil((new Date(dateStr).getTime() - Date.now()) / 86400000);
+}
+
+function dateOnly(value: string | null | undefined): string {
+  if (!value) return '';
+  return value.slice(0, 10);
 }
 
 const pageConfig: { page: Page; label: string; icon: React.ComponentType<{ className?: string }>; adminOnly?: boolean }[] = [
@@ -138,6 +143,12 @@ export default function App() {
   const [page, setPage] = useState<Page>('dashboard');
   const [error, setError] = useState('');
 
+  const [editingPayment, setEditingPayment] = useState<RentPayment | null>(null);
+  const [editAmount, setEditAmount] = useState('');
+  const [editDueDate, setEditDueDate] = useState('');
+  const [editPaidDate, setEditPaidDate] = useState('');
+  const [editStatus, setEditStatus] = useState<PaymentStatus>('pending');
+
   const visiblePages = useMemo(() => pageConfig.filter(p => user?.role === 'admin' || !p.adminOnly), [user]);
 
   async function load() {
@@ -145,6 +156,33 @@ export default function App() {
       setData(await api.dashboard());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to load data');
+    }
+  }
+
+  function startEditPayment(payment: RentPayment) {
+    setEditingPayment(payment);
+    setEditAmount(String(payment.amount));
+    setEditDueDate(dateOnly(payment.due_date));
+    setEditPaidDate(dateOnly(payment.paid_date));
+    setEditStatus(payment.status);
+  }
+
+  async function saveEditPayment(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingPayment) return;
+
+    try {
+      await api.updatePayment(editingPayment.id, {
+        amount: Number(editAmount),
+        due_date: editDueDate,
+        paid_date: editPaidDate || null,
+        status: editStatus,
+      });
+
+      setEditingPayment(null);
+      await load();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Update failed');
     }
   }
 
@@ -181,16 +219,24 @@ export default function App() {
         tenant: p.tenant?.name || p.tenant_id,
         property: p.property?.address || p.property_id,
         amount: `£${p.amount}`,
-        due: p.due_date,
-        paid: p.paid_date || '-',
+        due: dateOnly(p.due_date),
+        paid: dateOnly(p.paid_date) || '-',
         status: p.status,
         actions: user.role === 'admin' ? (
-          <button
-            onClick={() => deleteRentPayment(p.id)}
-            className="rounded bg-red-600 px-3 py-1 text-xs font-semibold text-white hover:bg-red-700"
-          >
-            Delete
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => startEditPayment(p)}
+              className="rounded bg-slate-700 px-3 py-1 text-xs font-semibold text-white hover:bg-slate-800"
+            >
+              Edit
+            </button>
+            <button
+              onClick={() => deleteRentPayment(p.id)}
+              className="rounded bg-red-600 px-3 py-1 text-xs font-semibold text-white hover:bg-red-700"
+            >
+              Delete
+            </button>
+          </div>
         ) : null
       }))} />
     : page === 'maintenance' ? <Maintenance data={data} refresh={load} />
@@ -218,6 +264,76 @@ export default function App() {
       {error && <p className="m-5 rounded-lg bg-red-50 text-red-700 p-3">{error}</p>}
       <div className="p-5">{content}</div>
     </main>
+
+    {editingPayment && (
+      <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4">
+        <form onSubmit={saveEditPayment} className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl space-y-4">
+          <h2 className="text-lg font-bold text-slate-900">Edit rent payment</h2>
+
+          <label className="block text-sm font-medium text-slate-700">
+            Amount
+            <input
+              required
+              type="number"
+              step="0.01"
+              className="mt-1 w-full rounded-lg border px-3 py-2"
+              value={editAmount}
+              onChange={e => setEditAmount(e.target.value)}
+            />
+          </label>
+
+          <label className="block text-sm font-medium text-slate-700">
+            Due date
+            <input
+              required
+              type="date"
+              className="mt-1 w-full rounded-lg border px-3 py-2"
+              value={editDueDate}
+              onChange={e => setEditDueDate(e.target.value)}
+            />
+          </label>
+
+          <label className="block text-sm font-medium text-slate-700">
+            Paid date
+            <input
+              type="date"
+              className="mt-1 w-full rounded-lg border px-3 py-2"
+              value={editPaidDate}
+              onChange={e => setEditPaidDate(e.target.value)}
+            />
+          </label>
+
+          <label className="block text-sm font-medium text-slate-700">
+            Status
+            <select
+              className="mt-1 w-full rounded-lg border px-3 py-2"
+              value={editStatus}
+              onChange={e => setEditStatus(e.target.value as PaymentStatus)}
+            >
+              <option value="pending">Pending</option>
+              <option value="paid">Paid</option>
+              <option value="overdue">Overdue</option>
+            </select>
+          </label>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={() => setEditingPayment(null)}
+              className="rounded-lg border px-4 py-2 text-sm"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+            >
+              Save
+            </button>
+          </div>
+        </form>
+      </div>
+    )}
 
     <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-950 text-white flex overflow-x-auto">
       {visiblePages.map(({ page: p, icon: Icon }) => <button key={p} onClick={() => setPage(p)} className={`p-3 ${page === p ? 'text-emerald-400' : 'text-slate-400'}`}><Icon /></button>)}
