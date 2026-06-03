@@ -7,6 +7,15 @@ export interface LoginResponse {
   user: User;
 }
 
+export type RentPaymentUpdate = {
+  amount?: number;
+  due_date?: string;
+  paid_date?: string | null;
+  status?: string;
+  payment_method?: string;
+  notes?: string;
+};
+
 async function request<T>(
   path: string,
   options: RequestInit = {}
@@ -57,14 +66,10 @@ export const api = {
       body: JSON.stringify(ticket),
     }),
 
-  updatePayment: (
-    id: string,
-    status: string,
-    paid_date?: string | null
-  ) =>
+  updatePayment: (id: string, payment: RentPaymentUpdate) =>
     request(`/rent-payments/${id}`, {
       method: 'PATCH',
-      body: JSON.stringify({ status, paid_date }),
+      body: JSON.stringify(payment),
     }),
 
   deleteRentPayment: (id: string) =>
