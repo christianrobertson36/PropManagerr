@@ -39,4 +39,6 @@ jobs:
           context: .
           file: ./server/Dockerfile
           push: true
-          tags: ghcr.io/christianrobertson36/propmanagerr-api:latest
+          tags: |
+            ghcr.io/christianrobertson36/propmanagerr-api:latest
+            ghcr.io/christianrobertson36/propmanagerr-api:v2
