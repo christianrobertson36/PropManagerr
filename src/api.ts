@@ -119,7 +119,7 @@ export const api = {
 
   updateTenant: (id: string, tenant: TenantPayload) =>
     request(`/tenants/${id}`, {
-      method: 'PATCH',
+      method: 'PUT',
       body: JSON.stringify(tenant),
     }),
 
