@@ -12,8 +12,11 @@ import {
   Wrench,
 } from 'lucide-react';
 import { api } from './api';
+import type { DocumentPayload } from './api';
 import type {
   DashboardData,
+  DocumentRecord,
+  DocType,
   Page,
   PaymentStatus,
   Property,
@@ -91,21 +94,12 @@ function Login({ onLogin }: { onLogin: (user: User) => void }) {
 
         <label className="block text-sm font-medium text-slate-700">
           Email
-          <input
-            className="mt-1 w-full rounded-lg border px-3 py-2"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-          />
+          <input className="mt-1 w-full rounded-lg border px-3 py-2" value={email} onChange={e => setEmail(e.target.value)} />
         </label>
 
         <label className="block text-sm font-medium text-slate-700">
           Password
-          <input
-            type="password"
-            className="mt-1 w-full rounded-lg border px-3 py-2"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-          />
+          <input type="password" className="mt-1 w-full rounded-lg border px-3 py-2" value={password} onChange={e => setPassword(e.target.value)} />
         </label>
 
         <button className="w-full rounded-lg bg-emerald-600 py-2 font-semibold text-white">
@@ -136,7 +130,7 @@ function Stat({
   );
 }
 
-function Dashboard({ data, user }: { data: DashboardData; user: User }) {
+function Dashboard({ data }: { data: DashboardData; user: User }) {
   const paid = data.rentPayments.filter(p => p.status === 'paid').reduce((s, p) => s + p.amount, 0);
   const outstanding = data.rentPayments.filter(p => p.status !== 'paid').reduce((s, p) => s + p.amount, 0);
   const openRepairs = data.maintenanceTickets.filter(t => t.status !== 'resolved').length;
@@ -184,7 +178,6 @@ function DataTable({ title, rows }: { title: string; rows: Record<string, any>[]
   return (
     <section className="rounded-xl bg-white p-5 shadow-sm overflow-x-auto">
       <h2 className="font-bold text-slate-900 mb-4">{title}</h2>
-
       {rows.length === 0 ? (
         <p className="text-sm text-slate-500">No records found.</p>
       ) : (
@@ -192,9 +185,7 @@ function DataTable({ title, rows }: { title: string; rows: Record<string, any>[]
           <thead>
             <tr className="text-left border-b">
               {keys.map(k => (
-                <th key={k} className="py-2 pr-4 capitalize">
-                  {k.replace(/_/g, ' ')}
-                </th>
+                <th key={k} className="py-2 pr-4 capitalize">{k.replace(/_/g, ' ')}</th>
               ))}
             </tr>
           </thead>
@@ -202,9 +193,7 @@ function DataTable({ title, rows }: { title: string; rows: Record<string, any>[]
             {rows.map((r, i) => (
               <tr key={i} className="border-b last:border-0">
                 {keys.map(k => (
-                  <td key={k} className="py-3 pr-4">
-                    {r[k]}
-                  </td>
+                  <td key={k} className="py-3 pr-4">{r[k]}</td>
                 ))}
               </tr>
             ))}
@@ -222,12 +211,7 @@ function Maintenance({ data, refresh }: { data: DashboardData; refresh: () => vo
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    await api.createTicket({
-      title,
-      description,
-      property_id: propertyId,
-      urgency: 'medium',
-    });
+    await api.createTicket({ title, description, property_id: propertyId, urgency: 'medium' });
     setTitle('');
     setDescription('');
     refresh();
@@ -247,34 +231,12 @@ function Maintenance({ data, refresh }: { data: DashboardData; refresh: () => vo
 
       <form onSubmit={submit} className="rounded-xl bg-white p-5 shadow-sm space-y-3">
         <h2 className="font-bold text-slate-900">Report a repair</h2>
-        <input
-          required
-          className="w-full rounded-lg border px-3 py-2"
-          placeholder="Title"
-          value={title}
-          onChange={e => setTitle(e.target.value)}
-        />
-        <textarea
-          required
-          className="w-full rounded-lg border px-3 py-2"
-          placeholder="Description"
-          value={description}
-          onChange={e => setDescription(e.target.value)}
-        />
-        <select
-          className="w-full rounded-lg border px-3 py-2"
-          value={propertyId}
-          onChange={e => setPropertyId(e.target.value)}
-        >
-          {data.properties.map(p => (
-            <option key={p.id} value={p.id}>
-              {p.address}
-            </option>
-          ))}
+        <input required className="w-full rounded-lg border px-3 py-2" placeholder="Title" value={title} onChange={e => setTitle(e.target.value)} />
+        <textarea required className="w-full rounded-lg border px-3 py-2" placeholder="Description" value={description} onChange={e => setDescription(e.target.value)} />
+        <select className="w-full rounded-lg border px-3 py-2" value={propertyId} onChange={e => setPropertyId(e.target.value)}>
+          {data.properties.map(p => <option key={p.id} value={p.id}>{p.address}</option>)}
         </select>
-        <button className="w-full rounded-lg bg-emerald-600 text-white py-2 font-semibold">
-          Submit
-        </button>
+        <button className="w-full rounded-lg bg-emerald-600 text-white py-2 font-semibold">Submit</button>
       </form>
     </div>
   );
@@ -311,6 +273,15 @@ export default function App() {
   const [editDueDate, setEditDueDate] = useState('');
   const [editPaidDate, setEditPaidDate] = useState('');
   const [editStatus, setEditStatus] = useState<PaymentStatus>('pending');
+
+  const [editingDocument, setEditingDocument] = useState<DocumentRecord | null>(null);
+  const [showDocumentForm, setShowDocumentForm] = useState(false);
+  const [documentName, setDocumentName] = useState('');
+  const [documentType, setDocumentType] = useState<DocType>('gas_safety');
+  const [documentPropertyId, setDocumentPropertyId] = useState('');
+  const [documentTenantId, setDocumentTenantId] = useState('');
+  const [documentExpiryDate, setDocumentExpiryDate] = useState('');
+  const [documentFileUrl, setDocumentFileUrl] = useState('');
 
   const visiblePages = useMemo(
     () => pageConfig.filter(p => user?.role === 'admin' || !p.adminOnly),
@@ -363,11 +334,8 @@ export default function App() {
     };
 
     try {
-      if (editingProperty) {
-        await api.updateProperty(editingProperty.id, payload);
-      } else {
-        await api.createProperty(payload);
-      }
+      if (editingProperty) await api.updateProperty(editingProperty.id, payload);
+      else await api.createProperty(payload);
 
       setShowPropertyForm(false);
       setEditingProperty(null);
@@ -426,11 +394,8 @@ export default function App() {
     };
 
     try {
-      if (editingTenant) {
-        await api.updateTenant(editingTenant.id, payload);
-      } else {
-        await api.createTenant(payload);
-      }
+      if (editingTenant) await api.updateTenant(editingTenant.id, payload);
+      else await api.createTenant(payload);
 
       setShowTenantForm(false);
       setEditingTenant(null);
@@ -489,6 +454,63 @@ export default function App() {
     }
   }
 
+  function startAddDocument() {
+    setEditingDocument(null);
+    setDocumentName('');
+    setDocumentType('gas_safety');
+    setDocumentPropertyId(data?.properties[0]?.id || '');
+    setDocumentTenantId('');
+    setDocumentExpiryDate('');
+    setDocumentFileUrl('');
+    setShowDocumentForm(true);
+  }
+
+  function startEditDocument(document: DocumentRecord) {
+    setEditingDocument(document);
+    setDocumentName(document.name || '');
+    setDocumentType(document.doc_type || 'gas_safety');
+    setDocumentPropertyId(document.property_id || '');
+    setDocumentTenantId(document.tenant_id || '');
+    setDocumentExpiryDate(dateOnly(document.expiry_date));
+    setDocumentFileUrl(document.file_url || '');
+    setShowDocumentForm(true);
+  }
+
+  async function saveDocument(e: React.FormEvent) {
+    e.preventDefault();
+
+    const payload: DocumentPayload = {
+      property_id: documentPropertyId || null,
+      tenant_id: documentTenantId || null,
+      name: documentName,
+      doc_type: documentType,
+      expiry_date: documentExpiryDate || null,
+      file_url: documentFileUrl,
+    };
+
+    try {
+      if (editingDocument) await api.updateDocument(editingDocument.id, payload);
+      else await api.createDocument(payload);
+
+      setShowDocumentForm(false);
+      setEditingDocument(null);
+      await load();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Save failed');
+    }
+  }
+
+  async function deleteDocument(id: string) {
+    if (!confirm('Delete this document?')) return;
+
+    try {
+      await api.deleteDocument(id);
+      await load();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Delete failed');
+    }
+  }
+
   useEffect(() => {
     const token = localStorage.getItem('pm_token');
 
@@ -518,10 +540,7 @@ export default function App() {
       <Dashboard data={data} user={user} />
     ) : page === 'properties' ? (
       <div className="space-y-4">
-        <button
-          onClick={startAddProperty}
-          className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
-        >
+        <button onClick={startAddProperty} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
           Add Property
         </button>
 
@@ -537,18 +556,8 @@ export default function App() {
             status: p.status,
             actions: (
               <div className="flex gap-2">
-                <button
-                  onClick={() => startEditProperty(p)}
-                  className="rounded bg-slate-700 px-3 py-1 text-xs font-semibold text-white hover:bg-slate-800"
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={() => deleteProperty(p.id)}
-                  className="rounded bg-red-600 px-3 py-1 text-xs font-semibold text-white hover:bg-red-700"
-                >
-                  Delete
-                </button>
+                <button onClick={() => startEditProperty(p)} className="rounded bg-slate-700 px-3 py-1 text-xs font-semibold text-white hover:bg-slate-800">Edit</button>
+                <button onClick={() => deleteProperty(p.id)} className="rounded bg-red-600 px-3 py-1 text-xs font-semibold text-white hover:bg-red-700">Delete</button>
               </div>
             ),
           }))}
@@ -556,10 +565,7 @@ export default function App() {
       </div>
     ) : page === 'tenants' ? (
       <div className="space-y-4">
-        <button
-          onClick={startAddTenant}
-          className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
-        >
+        <button onClick={startAddTenant} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
           Add Tenant
         </button>
 
@@ -575,18 +581,8 @@ export default function App() {
             status: t.payment_status,
             actions: (
               <div className="flex gap-2">
-                <button
-                  onClick={() => startEditTenant(t)}
-                  className="rounded bg-slate-700 px-3 py-1 text-xs font-semibold text-white hover:bg-slate-800"
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={() => deleteTenant(t.id)}
-                  className="rounded bg-red-600 px-3 py-1 text-xs font-semibold text-white hover:bg-red-700"
-                >
-                  Delete
-                </button>
+                <button onClick={() => startEditTenant(t)} className="rounded bg-slate-700 px-3 py-1 text-xs font-semibold text-white hover:bg-slate-800">Edit</button>
+                <button onClick={() => deleteTenant(t.id)} className="rounded bg-red-600 px-3 py-1 text-xs font-semibold text-white hover:bg-red-700">Delete</button>
               </div>
             ),
           }))}
@@ -605,18 +601,8 @@ export default function App() {
           actions:
             user.role === 'admin' ? (
               <div className="flex gap-2">
-                <button
-                  onClick={() => startEditPayment(p)}
-                  className="rounded bg-slate-700 px-3 py-1 text-xs font-semibold text-white hover:bg-slate-800"
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={() => deleteRentPayment(p.id)}
-                  className="rounded bg-red-600 px-3 py-1 text-xs font-semibold text-white hover:bg-red-700"
-                >
-                  Delete
-                </button>
+                <button onClick={() => startEditPayment(p)} className="rounded bg-slate-700 px-3 py-1 text-xs font-semibold text-white hover:bg-slate-800">Edit</button>
+                <button onClick={() => deleteRentPayment(p.id)} className="rounded bg-red-600 px-3 py-1 text-xs font-semibold text-white hover:bg-red-700">Delete</button>
               </div>
             ) : null,
         }))}
@@ -624,16 +610,32 @@ export default function App() {
     ) : page === 'maintenance' ? (
       <Maintenance data={data} refresh={load} />
     ) : page === 'documents' ? (
-      <DataTable
-        title="Documents & compliance"
-        rows={data.documents.map(d => ({
-          name: d.name,
-          type: d.doc_type,
-          property: d.property?.address || d.property_id,
-          expiry: d.expiry_date || '-',
-          file: d.file_url ? 'Uploaded' : 'Not uploaded',
-        }))}
-      />
+      <div className="space-y-4">
+        {user.role === 'admin' && (
+          <button onClick={startAddDocument} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
+            Add Document
+          </button>
+        )}
+
+        <DataTable
+          title="Documents & compliance"
+          rows={data.documents.map(d => ({
+            name: d.name,
+            type: d.doc_type,
+            property: d.property?.address || d.property_id,
+            tenant: d.tenant?.name || '-',
+            expiry: dateOnly(d.expiry_date) || '-',
+            file: d.file_url ? 'Uploaded' : 'Not uploaded',
+            actions:
+              user.role === 'admin' ? (
+                <div className="flex gap-2">
+                  <button onClick={() => startEditDocument(d)} className="rounded bg-slate-700 px-3 py-1 text-xs font-semibold text-white hover:bg-slate-800">Edit</button>
+                  <button onClick={() => deleteDocument(d.id)} className="rounded bg-red-600 px-3 py-1 text-xs font-semibold text-white hover:bg-red-700">Delete</button>
+                </div>
+              ) : null,
+          }))}
+        />
+      </div>
     ) : page === 'expenses' ? (
       <DataTable
         title="Expenses"
@@ -667,13 +669,7 @@ export default function App() {
 
         <nav className="p-3 space-y-1 flex-1">
           {visiblePages.map(({ page: p, label, icon: Icon }) => (
-            <button
-              key={p}
-              onClick={() => setPage(p)}
-              className={`w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm ${
-                page === p ? 'bg-emerald-600' : 'text-slate-300 hover:bg-slate-800'
-              }`}
-            >
+            <button key={p} onClick={() => setPage(p)} className={`w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm ${page === p ? 'bg-emerald-600' : 'text-slate-300 hover:bg-slate-800'}`}>
               <Icon className="w-4 h-4" />
               {label}
             </button>
@@ -684,12 +680,8 @@ export default function App() {
       <main className="flex-1">
         <header className="bg-white border-b px-5 py-4 flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold text-slate-900">
-              {pageConfig.find(p => p.page === page)?.label}
-            </h1>
-            <p className="text-sm text-slate-500">
-              Signed in as {user.name} ({user.role})
-            </p>
+            <h1 className="text-xl font-bold text-slate-900">{pageConfig.find(p => p.page === page)?.label}</h1>
+            <p className="text-sm text-slate-500">Signed in as {user.name} ({user.role})</p>
           </div>
 
           <button
@@ -705,37 +697,27 @@ export default function App() {
         </header>
 
         {error && <p className="m-5 rounded-lg bg-red-50 text-red-700 p-3">{error}</p>}
-
         <div className="p-5">{content}</div>
       </main>
 
       {showPropertyForm && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4">
           <form onSubmit={saveProperty} className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl space-y-4">
-            <h2 className="text-lg font-bold text-slate-900">
-              {editingProperty ? 'Edit property' : 'Add property'}
-            </h2>
-
+            <h2 className="text-lg font-bold text-slate-900">{editingProperty ? 'Edit property' : 'Add property'}</h2>
             <input required className="w-full rounded-lg border px-3 py-2" placeholder="Address" value={propertyAddress} onChange={e => setPropertyAddress(e.target.value)} />
             <input required className="w-full rounded-lg border px-3 py-2" placeholder="City" value={propertyCity} onChange={e => setPropertyCity(e.target.value)} />
             <input required className="w-full rounded-lg border px-3 py-2" placeholder="Postcode" value={propertyPostcode} onChange={e => setPropertyPostcode(e.target.value)} />
             <input required className="w-full rounded-lg border px-3 py-2" placeholder="Property type" value={propertyType} onChange={e => setPropertyType(e.target.value)} />
             <input required type="number" className="w-full rounded-lg border px-3 py-2" placeholder="Bedrooms" value={propertyBedrooms} onChange={e => setPropertyBedrooms(e.target.value)} />
             <input required type="number" step="0.01" className="w-full rounded-lg border px-3 py-2" placeholder="Monthly rent" value={propertyRent} onChange={e => setPropertyRent(e.target.value)} />
-
             <select className="w-full rounded-lg border px-3 py-2" value={propertyStatus} onChange={e => setPropertyStatus(e.target.value as PropertyStatus)}>
               <option value="active">Active</option>
               <option value="vacant">Vacant</option>
               <option value="maintenance">Maintenance</option>
             </select>
-
             <div className="flex justify-end gap-2 pt-2">
-              <button type="button" onClick={() => setShowPropertyForm(false)} className="rounded-lg border px-4 py-2 text-sm">
-                Cancel
-              </button>
-              <button type="submit" className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
-                Save
-              </button>
+              <button type="button" onClick={() => setShowPropertyForm(false)} className="rounded-lg border px-4 py-2 text-sm">Cancel</button>
+              <button type="submit" className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">Save</button>
             </div>
           </form>
         </div>
@@ -744,46 +726,30 @@ export default function App() {
       {showTenantForm && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4">
           <form onSubmit={saveTenant} className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl space-y-4">
-            <h2 className="text-lg font-bold text-slate-900">
-              {editingTenant ? 'Edit tenant' : 'Add tenant'}
-            </h2>
-
+            <h2 className="text-lg font-bold text-slate-900">{editingTenant ? 'Edit tenant' : 'Add tenant'}</h2>
             <input required className="w-full rounded-lg border px-3 py-2" placeholder="Name" value={tenantName} onChange={e => setTenantName(e.target.value)} />
             <input required type="email" className="w-full rounded-lg border px-3 py-2" placeholder="Email" value={tenantEmail} onChange={e => setTenantEmail(e.target.value)} />
             <input className="w-full rounded-lg border px-3 py-2" placeholder="Phone" value={tenantPhone} onChange={e => setTenantPhone(e.target.value)} />
-
             <select className="w-full rounded-lg border px-3 py-2" value={tenantPropertyId} onChange={e => setTenantPropertyId(e.target.value)}>
               <option value="">No property assigned</option>
-              {data.properties.map(p => (
-                <option key={p.id} value={p.id}>
-                  {p.address}
-                </option>
-              ))}
+              {data.properties.map(p => <option key={p.id} value={p.id}>{p.address}</option>)}
             </select>
-
             <label className="block text-sm font-medium text-slate-700">
               Lease start
               <input type="date" className="mt-1 w-full rounded-lg border px-3 py-2" value={tenantLeaseStart} onChange={e => setTenantLeaseStart(e.target.value)} />
             </label>
-
             <label className="block text-sm font-medium text-slate-700">
               Lease end
               <input type="date" className="mt-1 w-full rounded-lg border px-3 py-2" value={tenantLeaseEnd} onChange={e => setTenantLeaseEnd(e.target.value)} />
             </label>
-
             <select className="w-full rounded-lg border px-3 py-2" value={tenantPaymentStatus} onChange={e => setTenantPaymentStatus(e.target.value as PaymentStatus)}>
               <option value="pending">Pending</option>
               <option value="paid">Paid</option>
               <option value="overdue">Overdue</option>
             </select>
-
             <div className="flex justify-end gap-2 pt-2">
-              <button type="button" onClick={() => setShowTenantForm(false)} className="rounded-lg border px-4 py-2 text-sm">
-                Cancel
-              </button>
-              <button type="submit" className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
-                Save
-              </button>
+              <button type="button" onClick={() => setShowTenantForm(false)} className="rounded-lg border px-4 py-2 text-sm">Cancel</button>
+              <button type="submit" className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">Save</button>
             </div>
           </form>
         </div>
@@ -793,22 +759,18 @@ export default function App() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4">
           <form onSubmit={saveEditPayment} className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl space-y-4">
             <h2 className="text-lg font-bold text-slate-900">Edit rent payment</h2>
-
             <label className="block text-sm font-medium text-slate-700">
               Amount
               <input required type="number" step="0.01" className="mt-1 w-full rounded-lg border px-3 py-2" value={editAmount} onChange={e => setEditAmount(e.target.value)} />
             </label>
-
             <label className="block text-sm font-medium text-slate-700">
               Due date
               <input required type="date" className="mt-1 w-full rounded-lg border px-3 py-2" value={editDueDate} onChange={e => setEditDueDate(e.target.value)} />
             </label>
-
             <label className="block text-sm font-medium text-slate-700">
               Paid date
               <input type="date" className="mt-1 w-full rounded-lg border px-3 py-2" value={editPaidDate} onChange={e => setEditPaidDate(e.target.value)} />
             </label>
-
             <label className="block text-sm font-medium text-slate-700">
               Status
               <select className="mt-1 w-full rounded-lg border px-3 py-2" value={editStatus} onChange={e => setEditStatus(e.target.value as PaymentStatus)}>
@@ -817,14 +779,45 @@ export default function App() {
                 <option value="overdue">Overdue</option>
               </select>
             </label>
-
             <div className="flex justify-end gap-2 pt-2">
-              <button type="button" onClick={() => setEditingPayment(null)} className="rounded-lg border px-4 py-2 text-sm">
-                Cancel
-              </button>
-              <button type="submit" className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
-                Save
-              </button>
+              <button type="button" onClick={() => setEditingPayment(null)} className="rounded-lg border px-4 py-2 text-sm">Cancel</button>
+              <button type="submit" className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">Save</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {showDocumentForm && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4">
+          <form onSubmit={saveDocument} className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl space-y-4">
+            <h2 className="text-lg font-bold text-slate-900">{editingDocument ? 'Edit document' : 'Add document'}</h2>
+            <input required className="w-full rounded-lg border px-3 py-2" placeholder="Document name" value={documentName} onChange={e => setDocumentName(e.target.value)} />
+            <select className="w-full rounded-lg border px-3 py-2" value={documentType} onChange={e => setDocumentType(e.target.value as DocType)}>
+              <option value="tenancy_agreement">Tenancy agreement</option>
+              <option value="gas_safety">Gas safety</option>
+              <option value="epc">EPC</option>
+              <option value="eicr">EICR</option>
+              <option value="deposit_protection">Deposit protection</option>
+              <option value="right_to_rent">Right to rent</option>
+              <option value="smoke_co_alarm">Smoke/CO alarm</option>
+              <option value="other">Other</option>
+            </select>
+            <select className="w-full rounded-lg border px-3 py-2" value={documentPropertyId} onChange={e => setDocumentPropertyId(e.target.value)}>
+              <option value="">No property</option>
+              {data.properties.map(p => <option key={p.id} value={p.id}>{p.address}</option>)}
+            </select>
+            <select className="w-full rounded-lg border px-3 py-2" value={documentTenantId} onChange={e => setDocumentTenantId(e.target.value)}>
+              <option value="">No tenant</option>
+              {data.tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+            <label className="block text-sm font-medium text-slate-700">
+              Expiry date
+              <input type="date" className="mt-1 w-full rounded-lg border px-3 py-2" value={documentExpiryDate} onChange={e => setDocumentExpiryDate(e.target.value)} />
+            </label>
+            <input className="w-full rounded-lg border px-3 py-2" placeholder="File URL" value={documentFileUrl} onChange={e => setDocumentFileUrl(e.target.value)} />
+            <div className="flex justify-end gap-2 pt-2">
+              <button type="button" onClick={() => setShowDocumentForm(false)} className="rounded-lg border px-4 py-2 text-sm">Cancel</button>
+              <button type="submit" className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">Save</button>
             </div>
           </form>
         </div>
