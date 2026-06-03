@@ -6,12 +6,18 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import { query } from './db.js';
 import { comparePassword, requireAdmin, requireAuth, signUser } from './auth.js';
+import multer from 'multer';
 
 const app = express();
 app.use(helmet());
 app.use(cors({ origin: process.env.CORS_ORIGIN || true }));
 app.use(express.json({ limit: '10mb' }));
 app.use(morgan('combined'));
+app.use('/uploads', express.static('/app/uploads'));
+
+const upload = multer({
+  dest: '/app/uploads/documents',
+});
 
 const tenantFilter = (user, alias = '') => user.role === 'admin' ? { sql: '', params: [] } : { sql: ` where ${alias}tenant_id = $1`, params: [user.tenant_id] };
 
@@ -160,6 +166,32 @@ adminCrud('/documents', 'documents', [
   'expiry_date',
   'file_url'
 ], 'Document');
+
+adminCrud('/documents', 'documents', [
+  'property_id',
+  'tenant_id',
+  'name',
+  'doc_type',
+  'expiry_date',
+  'file_url'
+], 'Document');
+
+app.post(
+  '/documents/upload',
+  requireAuth,
+  requireAdmin,
+  upload.single('file'),
+  (req, res) => {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    res.json({
+      file_url: `/uploads/documents/${req.file.filename}`,
+      original_name: req.file.originalname,
+    });
+  }
+);
 
 adminCrud('/expenses', 'expenses', [
   'property_id',
