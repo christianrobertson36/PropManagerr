@@ -111,11 +111,12 @@ const adminCrud = (path, table, fields, name) => {
 
 adminCrud('/properties', 'properties', [
   'address',
+  'city',
   'postcode',
-  'type',
+  'status',
+  'monthly_rent',
   'bedrooms',
-  'rent_amount',
-  'notes'
+  'property_type'
 ], 'Property');
 
 adminCrud('/tenants', 'tenants', [
