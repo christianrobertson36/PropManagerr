@@ -44,6 +44,15 @@ export type ExpensePayload = {
   amount?: number;
 };
 
+export type DocumentPayload = {
+  property_id?: string | null;
+  tenant_id?: string | null;
+  name?: string;
+  doc_type?: string;
+  expiry_date?: string | null;
+  file_url?: string;
+};
+
 async function request<T>(
   path: string,
   options: RequestInit = {}
@@ -153,6 +162,23 @@ export const api = {
 
   deleteExpense: (id: string) =>
     request(`/expenses/${id}`, {
+      method: 'DELETE',
+    }),
+
+  createDocument: (document: DocumentPayload) =>
+    request('/documents', {
+      method: 'POST',
+      body: JSON.stringify(document),
+    }),
+
+  updateDocument: (id: string, document: DocumentPayload) =>
+    request(`/documents/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(document),
+    }),
+
+  deleteDocument: (id: string) =>
+    request(`/documents/${id}`, {
       method: 'DELETE',
     }),
 };
