@@ -60,12 +60,122 @@ app.post('/maintenance', requireAuth, async (req, res) => {
   res.status(201).json(rows[0]);
 });
 
-app.patch('/rent-payments/:id', requireAuth, requireAdmin, async (req, res) => {
-  const { status, paid_date } = req.body || {};
-  const { rows } = await query('update rent_payments set status=coalesce($2,status), paid_date=$3 where id=$1 returning *', [req.params.id, status, paid_date ?? null]);
-  if (!rows[0]) return res.status(404).json({ error: 'Payment not found' });
-  res.json(rows[0]);
-});
+const sendOneOr404 = (res, rows, name = 'Record') => {
+  if (!rows[0]) return res.status(404).json({ error: `${name} not found` });
+  return res.json(rows[0]);
+};
+
+const adminCrud = (path, table, fields, name) => {
+  app.post(path, requireAuth, requireAdmin, async (req, res) => {
+    const values = fields.map((field) => req.body[field] ?? null);
+    const columns = fields.join(', ');
+    const params = fields.map((_, index) => `$${index + 1}`).join(', ');
+
+    const { rows } = await query(
+      `insert into ${table} (${columns}) values (${params}) returning *`,
+      values
+    );
+
+    res.status(201).json(rows[0]);
+  });
+
+  app.patch(`${path}/:id`, requireAuth, requireAdmin, async (req, res) => {
+    const updates = fields.filter((field) =>
+      Object.prototype.hasOwnProperty.call(req.body, field)
+    );
+
+    if (!updates.length) {
+      return res.status(400).json({ error: 'No fields supplied to update' });
+    }
+
+    const setSql = updates.map((field, index) => `${field}=$${index + 2}`).join(', ');
+    const values = updates.map((field) => req.body[field]);
+
+    const { rows } = await query(
+      `update ${table} set ${setSql} where id=$1 returning *`,
+      [req.params.id, ...values]
+    );
+
+    sendOneOr404(res, rows, name);
+  });
+
+  app.delete(`${path}/:id`, requireAuth, requireAdmin, async (req, res) => {
+    const { rows } = await query(
+      `delete from ${table} where id=$1 returning *`,
+      [req.params.id]
+    );
+
+    sendOneOr404(res, rows, name);
+  });
+};
+
+adminCrud('/properties', 'properties', [
+  'address',
+  'postcode',
+  'type',
+  'bedrooms',
+  'rent_amount',
+  'notes'
+], 'Property');
+
+adminCrud('/tenants', 'tenants', [
+  'property_id',
+  'name',
+  'email',
+  'phone',
+  'tenancy_start',
+  'tenancy_end',
+  'rent_amount',
+  'deposit_amount',
+  'deposit_scheme',
+  'notes'
+], 'Tenant');
+
+adminCrud('/rent-payments', 'rent_payments', [
+  'tenant_id',
+  'property_id',
+  'due_date',
+  'amount',
+  'status',
+  'paid_date',
+  'payment_method',
+  'notes'
+], 'Rent payment');
+
+adminCrud('/maintenance-admin', 'maintenance_tickets', [
+  'property_id',
+  'tenant_id',
+  'title',
+  'description',
+  'urgency',
+  'status',
+  'contractor',
+  'cost',
+  'notes'
+], 'Maintenance ticket');
+
+adminCrud('/documents', 'documents', [
+  'property_id',
+  'tenant_id',
+  'type',
+  'title',
+  'issue_date',
+  'expiry_date',
+  'status',
+  'file_url',
+  'notes'
+], 'Document');
+
+adminCrud('/expenses', 'expenses', [
+  'property_id',
+  'date',
+  'category',
+  'description',
+  'amount',
+  'supplier',
+  'receipt_url',
+  'notes'
+], 'Expense');
 
 const port = Number(process.env.PORT || 3000);
 
