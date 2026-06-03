@@ -246,7 +246,7 @@ export default function App() {
 
   return <div className="min-h-screen bg-slate-100 flex">
     <aside className="w-64 bg-slate-950 text-white hidden md:flex flex-col">
-      <div className="p-5 flex items-center gap-3 border-b border-slate-800"><Building2 className="text-emerald-400" /><strong>PropManager UK</strong></div>
+      <div className="p-5 flex items-center gap-3 border-b border-slate-800"><Building2 className="text-emerald-400" /><strong>PropManager UK V6</strong></div>
       <nav className="p-3 space-y-1 flex-1">
         {visiblePages.map(({ page: p, label, icon: Icon }) => <button key={p} onClick={() => setPage(p)} className={`w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm ${page === p ? 'bg-emerald-600' : 'text-slate-300 hover:bg-slate-800'}`}><Icon className="w-4 h-4" />{label}</button>)}
       </nav>
