@@ -16,6 +16,39 @@ export type RentPaymentUpdate = {
   notes?: string;
 };
 
+export type PropertyPayload = {
+  address?: string;
+  postcode?: string;
+  type?: string;
+  bedrooms?: number;
+  rent_amount?: number;
+  notes?: string;
+};
+
+export type TenantPayload = {
+  property_id?: string | null;
+  name?: string;
+  email?: string;
+  phone?: string;
+  tenancy_start?: string | null;
+  tenancy_end?: string | null;
+  rent_amount?: number;
+  deposit_amount?: number;
+  deposit_scheme?: string;
+  notes?: string;
+};
+
+export type ExpensePayload = {
+  property_id?: string | null;
+  date?: string;
+  category?: string;
+  description?: string;
+  amount?: number;
+  supplier?: string;
+  receipt_url?: string;
+  notes?: string;
+};
+
 async function request<T>(
   path: string,
   options: RequestInit = {}
@@ -66,6 +99,40 @@ export const api = {
       body: JSON.stringify(ticket),
     }),
 
+  createProperty: (property: PropertyPayload) =>
+    request('/properties', {
+      method: 'POST',
+      body: JSON.stringify(property),
+    }),
+
+  updateProperty: (id: string, property: PropertyPayload) =>
+    request(`/properties/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(property),
+    }),
+
+  deleteProperty: (id: string) =>
+    request(`/properties/${id}`, {
+      method: 'DELETE',
+    }),
+
+  createTenant: (tenant: TenantPayload) =>
+    request('/tenants', {
+      method: 'POST',
+      body: JSON.stringify(tenant),
+    }),
+
+  updateTenant: (id: string, tenant: TenantPayload) =>
+    request(`/tenants/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(tenant),
+    }),
+
+  deleteTenant: (id: string) =>
+    request(`/tenants/${id}`, {
+      method: 'DELETE',
+    }),
+
   updatePayment: (id: string, payment: RentPaymentUpdate) =>
     request(`/rent-payments/${id}`, {
       method: 'PATCH',
@@ -74,6 +141,23 @@ export const api = {
 
   deleteRentPayment: (id: string) =>
     request(`/rent-payments/${id}`, {
+      method: 'DELETE',
+    }),
+
+  createExpense: (expense: ExpensePayload) =>
+    request('/expenses', {
+      method: 'POST',
+      body: JSON.stringify(expense),
+    }),
+
+  updateExpense: (id: string, expense: ExpensePayload) =>
+    request(`/expenses/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(expense),
+    }),
+
+  deleteExpense: (id: string) =>
+    request(`/expenses/${id}`, {
       method: 'DELETE',
     }),
 };
