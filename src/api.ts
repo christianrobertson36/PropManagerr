@@ -18,11 +18,12 @@ export type RentPaymentUpdate = {
 
 export type PropertyPayload = {
   address?: string;
+  city?: string;
   postcode?: string;
-  type?: string;
+  status?: string;
+  monthly_rent?: number;
   bedrooms?: number;
-  rent_amount?: number;
-  notes?: string;
+  property_type?: string;
 };
 
 export type TenantPayload = {
@@ -30,12 +31,9 @@ export type TenantPayload = {
   name?: string;
   email?: string;
   phone?: string;
-  tenancy_start?: string | null;
-  tenancy_end?: string | null;
-  rent_amount?: number;
-  deposit_amount?: number;
-  deposit_scheme?: string;
-  notes?: string;
+  lease_start?: string | null;
+  lease_end?: string | null;
+  payment_status?: string;
 };
 
 export type ExpensePayload = {
@@ -44,9 +42,6 @@ export type ExpensePayload = {
   category?: string;
   description?: string;
   amount?: number;
-  supplier?: string;
-  receipt_url?: string;
-  notes?: string;
 };
 
 async function request<T>(
