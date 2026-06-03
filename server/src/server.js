@@ -119,15 +119,15 @@ adminCrud('/properties', 'properties', [
   'property_type'
 ], 'Property');
 
-adminCrud('tenants', [
+adminCrud('/tenants', 'tenants', [
   'property_id',
   'name',
   'email',
   'phone',
   'lease_start',
   'lease_end',
-  'payment_status',
-]);
+  'payment_status'
+], 'Tenant');
 
 adminCrud('/rent-payments', 'rent_payments', [
   'tenant_id',
