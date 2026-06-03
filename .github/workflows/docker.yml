@@ -41,4 +41,4 @@ jobs:
           push: true
           tags: |
             ghcr.io/christianrobertson36/propmanagerr-api:latest
-            ghcr.io/christianrobertson36/propmanagerr-api:v2
+            ghcr.io/christianrobertson36/propmanagerr-api:v3
