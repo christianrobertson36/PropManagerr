@@ -33,7 +33,7 @@ jobs:
           push: true
           tags: |
             ghcr.io/christianrobertson36/propmanagerr-web:latest
-            ghcr.io/christianrobertson36/propmanagerr-web:v4
+            ghcr.io/christianrobertson36/propmanagerr-web:v5
 
       - name: Build and push api
         uses: docker/build-push-action@v6
