@@ -102,7 +102,7 @@ export const api = {
 
   updateProperty: (id: string, property: PropertyPayload) =>
     request(`/properties/${id}`, {
-      method: 'PUT',
+      method: 'PATCH',
       body: JSON.stringify(property),
     }),
 
@@ -119,7 +119,7 @@ export const api = {
 
   updateTenant: (id: string, tenant: TenantPayload) =>
     request(`/tenants/${id}`, {
-      method: 'PUT',
+      method: 'PATCH',
       body: JSON.stringify(tenant),
     }),
 
@@ -130,7 +130,7 @@ export const api = {
 
   updatePayment: (id: string, payment: RentPaymentUpdate) =>
     request(`/rent-payments/${id}`, {
-      method: 'PUT',
+      method: 'PATCH',
       body: JSON.stringify(payment),
     }),
 
@@ -147,7 +147,7 @@ export const api = {
 
   updateExpense: (id: string, expense: ExpensePayload) =>
     request(`/expenses/${id}`, {
-      method: 'PUT',
+      method: 'PATCH',
       body: JSON.stringify(expense),
     }),
 
