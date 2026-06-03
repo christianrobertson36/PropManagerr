@@ -51,9 +51,6 @@ function Login({ onLogin }: { onLogin: (user: User) => void }) {
         <label className="block text-sm font-medium text-slate-700">Email<input className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" value={email} onChange={e => setEmail(e.target.value)} /></label>
         <label className="block text-sm font-medium text-slate-700">Password<input className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" type="password" value={password} onChange={e => setPassword(e.target.value)} /></label>
         <button disabled={loading} className="w-full rounded-lg bg-emerald-600 text-white py-2.5 font-semibold hover:bg-emerald-700 disabled:opacity-60">{loading ? 'Signing in...' : 'Sign in'}</button>
-        <div className="text-xs text-slate-500 bg-slate-50 rounded-lg p-3">
-          Trial logins after first seed: admin@propmanager.local / ChangeMe123! and tenant@example.local / ChangeMe123!
-        </div>
       </form>
     </main>
   );
@@ -68,6 +65,7 @@ function Dashboard({ data, user }: { data: DashboardData; user: User }) {
   const outstanding = data.rentPayments.filter(p => p.status !== 'paid').reduce((s, p) => s + p.amount, 0);
   const openRepairs = data.maintenanceTickets.filter(t => t.status !== 'resolved').length;
   const expiring = data.documents.filter(d => { const days = daysUntil(d.expiry_date); return days !== null && days <= 90; });
+
   return <div className="space-y-6">
     <div className="grid gap-4 md:grid-cols-4">
       <Stat label="Rent received" value={`£${paid.toLocaleString()}`} icon={Receipt} />
@@ -75,27 +73,62 @@ function Dashboard({ data, user }: { data: DashboardData; user: User }) {
       <Stat label="Open repairs" value={String(openRepairs)} icon={Wrench} />
       <Stat label={user.role === 'admin' ? 'Properties' : 'My home'} value={String(data.properties.length)} icon={Building2} />
     </div>
-    <section className="rounded-xl bg-white border border-slate-200 p-5"><h2 className="font-semibold text-slate-900 mb-3">Compliance reminders</h2><div className="space-y-2">{expiring.length === 0 ? <p className="text-sm text-slate-500">No documents expiring in the next 90 days.</p> : expiring.map(d => { const days = daysUntil(d.expiry_date); return <div key={d.id} className="flex justify-between rounded-lg bg-slate-50 p-3 text-sm"><span>{d.name}</span><strong className={days !== null && days < 0 ? 'text-red-600' : 'text-amber-600'}>{days !== null && days < 0 ? `${Math.abs(days)} days overdue` : `${days} days left`}</strong></div>; })}</div></section>
+    <section className="rounded-xl bg-white border border-slate-200 p-5">
+      <h2 className="font-semibold text-slate-900 mb-3">Compliance reminders</h2>
+      <div className="space-y-2">
+        {expiring.length === 0 ? <p className="text-sm text-slate-500">No documents expiring in the next 90 days.</p> : expiring.map(d => {
+          const days = daysUntil(d.expiry_date);
+          return <div key={d.id} className="flex justify-between rounded-lg bg-slate-50 p-3 text-sm"><span>{d.name}</span><strong className={days !== null && days < 0 ? 'text-red-600' : 'text-amber-600'}>{days !== null && days < 0 ? `${Math.abs(days)} days overdue` : `${days} days left`}</strong></div>;
+        })}
+      </div>
+    </section>
   </div>;
 }
 
 function DataTable({ title, rows }: { title: string; rows: Record<string, React.ReactNode>[] }) {
   const keys = rows[0] ? Object.keys(rows[0]) : [];
-  return <section className="rounded-xl bg-white border border-slate-200 overflow-hidden"><div className="p-5 border-b"><h2 className="font-semibold text-slate-900">{title}</h2></div>{rows.length === 0 ? <p className="p-5 text-sm text-slate-500">No records found.</p> : <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-slate-50 text-slate-500"><tr>{keys.map(k => <th key={k} className="text-left p-3 font-semibold capitalize">{k.replace(/_/g, ' ')}</th>)}</tr></thead><tbody>{rows.map((r, i) => <tr key={i} className="border-t">{keys.map(k => <td key={k} className="p-3 text-slate-700">{r[k]}</td>)}</tr>)}</tbody></table></div>}</section>;
+
+  return <section className="rounded-xl bg-white border border-slate-200 overflow-hidden">
+    <div className="p-5 border-b"><h2 className="font-semibold text-slate-900">{title}</h2></div>
+    {rows.length === 0 ? <p className="p-5 text-sm text-slate-500">No records found.</p> : (
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-50 text-slate-500">
+            <tr>{keys.map(k => <th key={k} className="text-left p-3 font-semibold capitalize">{k.replace(/_/g, ' ')}</th>)}</tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => <tr key={i} className="border-t">{keys.map(k => <td key={k} className="p-3 text-slate-700">{r[k]}</td>)}</tr>)}
+          </tbody>
+        </table>
+      </div>
+    )}
+  </section>;
 }
 
 function Maintenance({ data, refresh }: { data: DashboardData; refresh: () => void }) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [propertyId, setPropertyId] = useState(data.properties[0]?.id || '');
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     await api.createTicket({ title, description, property_id: propertyId, urgency: 'medium' });
-    setTitle(''); setDescription(''); refresh();
+    setTitle('');
+    setDescription('');
+    refresh();
   }
+
   return <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
     <DataTable title="Repair tickets" rows={data.maintenanceTickets.map(t => ({ title: t.title, property: t.property?.address || t.property_id, urgency: t.urgency, status: t.status }))} />
-    <form onSubmit={submit} className="rounded-xl bg-white border border-slate-200 p-5 space-y-3 h-fit"><h2 className="font-semibold">Report a repair</h2><input required className="w-full rounded-lg border px-3 py-2" placeholder="Issue title" value={title} onChange={e => setTitle(e.target.value)} /><textarea required className="w-full rounded-lg border px-3 py-2" placeholder="Describe the problem" value={description} onChange={e => setDescription(e.target.value)} /><select className="w-full rounded-lg border px-3 py-2" value={propertyId} onChange={e => setPropertyId(e.target.value)}>{data.properties.map(p => <option key={p.id} value={p.id}>{p.address}</option>)}</select><button className="w-full rounded-lg bg-emerald-600 text-white py-2 font-semibold">Submit</button></form>
+    <form onSubmit={submit} className="rounded-xl bg-white border border-slate-200 p-5 space-y-3 h-fit">
+      <h2 className="font-semibold">Report a repair</h2>
+      <input required className="w-full rounded-lg border px-3 py-2" placeholder="Issue title" value={title} onChange={e => setTitle(e.target.value)} />
+      <textarea required className="w-full rounded-lg border px-3 py-2" placeholder="Describe the problem" value={description} onChange={e => setDescription(e.target.value)} />
+      <select className="w-full rounded-lg border px-3 py-2" value={propertyId} onChange={e => setPropertyId(e.target.value)}>
+        {data.properties.map(p => <option key={p.id} value={p.id}>{p.address}</option>)}
+      </select>
+      <button className="w-full rounded-lg bg-emerald-600 text-white py-2 font-semibold">Submit</button>
+    </form>
   </div>;
 }
 
@@ -108,11 +141,35 @@ export default function App() {
   const visiblePages = useMemo(() => pageConfig.filter(p => user?.role === 'admin' || !p.adminOnly), [user]);
 
   async function load() {
-    try { setData(await api.dashboard()); } catch (err) { setError(err instanceof Error ? err.message : 'Unable to load data'); }
+    try {
+      setData(await api.dashboard());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to load data');
+    }
   }
 
-  useEffect(() => { const token = localStorage.getItem('pm_token'); if (token) api.me().then(r => { setUser(r.user); load(); }).catch(() => localStorage.removeItem('pm_token')); }, []);
-  useEffect(() => { if (user) load(); }, [user]);
+  async function deleteRentPayment(id: string) {
+    if (!confirm('Delete this rent payment?')) return;
+
+    try {
+      await api.deleteRentPayment(id);
+      await load();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Delete failed');
+    }
+  }
+
+  useEffect(() => {
+    const token = localStorage.getItem('pm_token');
+    if (token) api.me().then(r => {
+      setUser(r.user);
+      load();
+    }).catch(() => localStorage.removeItem('pm_token'));
+  }, []);
+
+  useEffect(() => {
+    if (user) load();
+  }, [user]);
 
   if (!user) return <Login onLogin={setUser} />;
   if (!data) return <div className="min-h-screen grid place-items-center text-slate-600">Loading PropManager...</div>;
@@ -120,15 +177,50 @@ export default function App() {
   const content = page === 'dashboard' ? <Dashboard data={data} user={user} />
     : page === 'properties' ? <DataTable title="Properties" rows={data.properties.map(p => ({ address: p.address, city: p.city, postcode: p.postcode, rent: `£${p.monthly_rent}`, status: p.status }))} />
     : page === 'tenants' ? <DataTable title="Tenants" rows={data.tenants.map(t => ({ name: t.name, email: t.email, phone: t.phone, property: t.property?.address || '-', status: t.payment_status }))} />
-    : page === 'rent' ? <DataTable title="Rent payments" rows={data.rentPayments.map(p => ({ tenant: p.tenant?.name || p.tenant_id, property: p.property?.address || p.property_id, amount: `£${p.amount}`, due: p.due_date, paid: p.paid_date || '-', status: p.status }))} />
+    : page === 'rent' ? <DataTable title="Rent payments" rows={data.rentPayments.map(p => ({
+        tenant: p.tenant?.name || p.tenant_id,
+        property: p.property?.address || p.property_id,
+        amount: `£${p.amount}`,
+        due: p.due_date,
+        paid: p.paid_date || '-',
+        status: p.status,
+        actions: user.role === 'admin' ? (
+          <button
+            onClick={() => deleteRentPayment(p.id)}
+            className="rounded bg-red-600 px-3 py-1 text-xs font-semibold text-white hover:bg-red-700"
+          >
+            Delete
+          </button>
+        ) : null
+      }))} />
     : page === 'maintenance' ? <Maintenance data={data} refresh={load} />
     : page === 'documents' ? <DataTable title="Documents & compliance" rows={data.documents.map(d => ({ name: d.name, type: d.doc_type, property: d.property?.address || d.property_id, expiry: d.expiry_date || '-', file: d.file_url ? 'Uploaded' : 'Not uploaded' }))} />
     : page === 'expenses' ? <DataTable title="Expenses" rows={data.expenses.map(e => ({ date: e.date, category: e.category, property: e.property?.address || 'General', amount: `£${e.amount}`, description: e.description }))} />
     : <DataTable title="Admin tools" rows={[{ feature: 'Role based access', status: 'Enabled' }, { feature: 'Manual rent tracking', status: 'Enabled' }, { feature: 'Audit log schema', status: 'Included' }, { feature: 'TrueNAS Docker Compose', status: 'Included' }]} />;
 
   return <div className="min-h-screen bg-slate-100 flex">
-    <aside className="w-64 bg-slate-950 text-white hidden md:flex flex-col"><div className="p-5 flex items-center gap-3 border-b border-slate-800"><Building2 className="text-emerald-400" /><strong>PropManager UK</strong></div><nav className="p-3 space-y-1 flex-1">{visiblePages.map(({ page: p, label, icon: Icon }) => <button key={p} onClick={() => setPage(p)} className={`w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm ${page === p ? 'bg-emerald-600' : 'text-slate-300 hover:bg-slate-800'}`}><Icon className="w-4 h-4" />{label}</button>)}</nav></aside>
-    <main className="flex-1"><header className="bg-white border-b px-5 py-4 flex items-center justify-between"><div><h1 className="text-xl font-bold text-slate-900">{pageConfig.find(p => p.page === page)?.label}</h1><p className="text-sm text-slate-500">Signed in as {user.name} ({user.role})</p></div><button onClick={() => { localStorage.removeItem('pm_token'); setUser(null); }} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm"><LogOut className="w-4 h-4" />Logout</button></header>{error && <p className="m-5 rounded-lg bg-red-50 text-red-700 p-3">{error}</p>}<div className="p-5">{content}</div></main>
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-950 text-white flex overflow-x-auto">{visiblePages.map(({ page: p, icon: Icon }) => <button key={p} onClick={() => setPage(p)} className={`p-3 ${page === p ? 'text-emerald-400' : 'text-slate-400'}`}><Icon /></button>)}</nav>
+    <aside className="w-64 bg-slate-950 text-white hidden md:flex flex-col">
+      <div className="p-5 flex items-center gap-3 border-b border-slate-800"><Building2 className="text-emerald-400" /><strong>PropManager UK</strong></div>
+      <nav className="p-3 space-y-1 flex-1">
+        {visiblePages.map(({ page: p, label, icon: Icon }) => <button key={p} onClick={() => setPage(p)} className={`w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm ${page === p ? 'bg-emerald-600' : 'text-slate-300 hover:bg-slate-800'}`}><Icon className="w-4 h-4" />{label}</button>)}
+      </nav>
+    </aside>
+
+    <main className="flex-1">
+      <header className="bg-white border-b px-5 py-4 flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900">{pageConfig.find(p => p.page === page)?.label}</h1>
+          <p className="text-sm text-slate-500">Signed in as {user.name} ({user.role})</p>
+        </div>
+        <button onClick={() => { localStorage.removeItem('pm_token'); setUser(null); }} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm"><LogOut className="w-4 h-4" />Logout</button>
+      </header>
+
+      {error && <p className="m-5 rounded-lg bg-red-50 text-red-700 p-3">{error}</p>}
+      <div className="p-5">{content}</div>
+    </main>
+
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-950 text-white flex overflow-x-auto">
+      {visiblePages.map(({ page: p, icon: Icon }) => <button key={p} onClick={() => setPage(p)} className={`p-3 ${page === p ? 'text-emerald-400' : 'text-slate-400'}`}><Icon /></button>)}
+    </nav>
   </div>;
 }
