@@ -76,33 +76,37 @@ function Login({ onLogin }: { onLogin: (user: User) => void }) {
 
   return (
     <div className="min-h-screen grid place-items-center bg-slate-100 p-4">
-      <form onSubmit={submit} className="w-full max-w-md rounded-2xl bg-white p-8 shadow-xl space-y-4">
-        <div className="flex items-center gap-3">
-          <Building2 className="text-emerald-600" />
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">PropManager UK</h1>
-            <p className="text-sm text-slate-500">Landlord and tenant portal</p>
-          </div>
+      <form onSubmit={submit} className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl space-y-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">PropManager UK</h1>
+          <p className="text-sm text-slate-500">Landlord and tenant portal</p>
         </div>
 
         {error && (
-          <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700 flex gap-2">
-            <AlertTriangle className="w-4 h-4" />
-            {error}
-          </p>
+          <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>
         )}
 
         <label className="block text-sm font-medium text-slate-700">
           Email
-          <input className="mt-1 w-full rounded-lg border px-3 py-2" value={email} onChange={e => setEmail(e.target.value)} />
+          <input
+            type="email"
+            className="mt-1 w-full rounded-lg border px-3 py-2"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+          />
         </label>
 
         <label className="block text-sm font-medium text-slate-700">
           Password
-          <input type="password" className="mt-1 w-full rounded-lg border px-3 py-2" value={password} onChange={e => setPassword(e.target.value)} />
+          <input
+            type="password"
+            className="mt-1 w-full rounded-lg border px-3 py-2"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+          />
         </label>
 
-        <button className="w-full rounded-lg bg-emerald-600 py-2 font-semibold text-white">
+        <button className="w-full rounded-lg bg-emerald-600 px-4 py-2 font-semibold text-white hover:bg-emerald-700">
           {loading ? 'Signing in...' : 'Sign in'}
         </button>
       </form>
@@ -120,19 +124,23 @@ function Stat({
   icon: React.ComponentType<{ className?: string }>;
 }) {
   return (
-    <div className="rounded-xl bg-white p-5 shadow-sm flex items-center justify-between">
+    <div className="rounded-xl bg-white p-5 shadow-sm border flex items-center gap-4">
+      <Icon className="w-8 h-8 text-emerald-600" />
       <div>
         <p className="text-sm text-slate-500">{label}</p>
         <p className="text-2xl font-bold text-slate-900">{value}</p>
       </div>
-      <Icon className="text-emerald-600" />
     </div>
   );
 }
 
 function Dashboard({ data }: { data: DashboardData; user: User }) {
-  const paid = data.rentPayments.filter(p => p.status === 'paid').reduce((s, p) => s + p.amount, 0);
-  const outstanding = data.rentPayments.filter(p => p.status !== 'paid').reduce((s, p) => s + p.amount, 0);
+  const paid = data.rentPayments
+    .filter(p => p.status === 'paid')
+    .reduce((s, p) => s + p.amount, 0);
+  const outstanding = data.rentPayments
+    .filter(p => p.status !== 'paid')
+    .reduce((s, p) => s + p.amount, 0);
   const openRepairs = data.maintenanceTickets.filter(t => t.status !== 'resolved').length;
   const expiring = data.documents.filter(d => {
     const days = daysUntil(d.expiry_date);
@@ -140,16 +148,15 @@ function Dashboard({ data }: { data: DashboardData; user: User }) {
   });
 
   return (
-    <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-4">
-        <Stat label="Properties" value={String(data.properties.length)} icon={Building2} />
+    <div className="space-y-5">
+      <div className="grid gap-4 md:grid-cols-3">
         <Stat label="Rent paid" value={`£${paid}`} icon={Receipt} />
         <Stat label="Outstanding" value={`£${outstanding}`} icon={AlertTriangle} />
         <Stat label="Open repairs" value={String(openRepairs)} icon={Wrench} />
       </div>
 
-      <section className="rounded-xl bg-white p-5 shadow-sm">
-        <h2 className="font-bold text-slate-900 mb-3">Compliance reminders</h2>
+      <div className="rounded-xl bg-white p-5 shadow-sm border">
+        <h2 className="text-lg font-bold text-slate-900 mb-3">Compliance reminders</h2>
         {expiring.length === 0 ? (
           <p className="text-sm text-slate-500">No documents expiring in the next 90 days.</p>
         ) : (
@@ -159,15 +166,17 @@ function Dashboard({ data }: { data: DashboardData; user: User }) {
               return (
                 <div key={d.id} className="rounded-lg border p-3 flex justify-between">
                   <span>{d.name}</span>
-                  <span className="text-sm text-red-600">
-                    {days !== null && days < 0 ? `${Math.abs(days)} days overdue` : `${days} days left`}
-                  </span>
+                  <strong className="text-amber-700">
+                    {days !== null && days < 0
+                      ? `${Math.abs(days)} days overdue`
+                      : `${days} days left`}
+                  </strong>
                 </div>
               );
             })}
           </div>
         )}
-      </section>
+      </div>
     </div>
   );
 }
@@ -176,31 +185,40 @@ function DataTable({ title, rows }: { title: string; rows: Record<string, any>[]
   const keys = rows[0] ? Object.keys(rows[0]) : [];
 
   return (
-    <section className="rounded-xl bg-white p-5 shadow-sm overflow-x-auto">
-      <h2 className="font-bold text-slate-900 mb-4">{title}</h2>
+    <div className="rounded-xl bg-white shadow-sm border overflow-hidden">
+      <div className="p-4 border-b">
+        <h2 className="font-bold text-slate-900">{title}</h2>
+      </div>
+
       {rows.length === 0 ? (
-        <p className="text-sm text-slate-500">No records found.</p>
+        <p className="p-4 text-sm text-slate-500">No records found.</p>
       ) : (
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left border-b">
-              {keys.map(k => (
-                <th key={k} className="py-2 pr-4 capitalize">{k.replace(/_/g, ' ')}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r, i) => (
-              <tr key={i} className="border-b last:border-0">
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead className="bg-slate-50 text-slate-600">
+              <tr>
                 {keys.map(k => (
-                  <td key={k} className="py-3 pr-4">{r[k]}</td>
+                  <th key={k} className="px-4 py-3 text-left font-semibold">
+                    {k.replace(/_/g, ' ')}
+                  </th>
                 ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr key={i} className="border-t">
+                  {keys.map(k => (
+                    <td key={k} className="px-4 py-3 align-top">
+                      {r[k]}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
-    </section>
+    </div>
   );
 }
 
@@ -218,9 +236,9 @@ function Maintenance({ data, refresh }: { data: DashboardData; refresh: () => vo
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <DataTable
-        title="Maintenance tickets"
+        title="Repair tickets"
         rows={data.maintenanceTickets.map(t => ({
           title: t.title,
           property: t.property?.address || t.property_id,
@@ -229,15 +247,39 @@ function Maintenance({ data, refresh }: { data: DashboardData; refresh: () => vo
         }))}
       />
 
-      <form onSubmit={submit} className="rounded-xl bg-white p-5 shadow-sm space-y-3">
-        <h2 className="font-bold text-slate-900">Report a repair</h2>
-        <input required className="w-full rounded-lg border px-3 py-2" placeholder="Title" value={title} onChange={e => setTitle(e.target.value)} />
-        <textarea required className="w-full rounded-lg border px-3 py-2" placeholder="Description" value={description} onChange={e => setDescription(e.target.value)} />
-        <select className="w-full rounded-lg border px-3 py-2" value={propertyId} onChange={e => setPropertyId(e.target.value)}>
-          {data.properties.map(p => <option key={p.id} value={p.id}>{p.address}</option>)}
-        </select>
-        <button className="w-full rounded-lg bg-emerald-600 text-white py-2 font-semibold">Submit</button>
-      </form>
+      <div className="rounded-xl bg-white p-5 shadow-sm border">
+        <h2 className="font-bold text-slate-900 mb-4">Report a repair</h2>
+        <form onSubmit={submit} className="space-y-3">
+          <input
+            required
+            className="w-full rounded-lg border px-3 py-2"
+            placeholder="Title"
+            value={title}
+            onChange={e => setTitle(e.target.value)}
+          />
+          <textarea
+            required
+            className="w-full rounded-lg border px-3 py-2"
+            placeholder="Description"
+            value={description}
+            onChange={e => setDescription(e.target.value)}
+          />
+          <select
+            className="w-full rounded-lg border px-3 py-2"
+            value={propertyId}
+            onChange={e => setPropertyId(e.target.value)}
+          >
+            {data.properties.map(p => (
+              <option key={p.id} value={p.id}>
+                {p.address}
+              </option>
+            ))}
+          </select>
+          <button className="w-full rounded-lg bg-emerald-600 text-white py-2 font-semibold">
+            Submit
+          </button>
+        </form>
+      </div>
     </div>
   );
 }
@@ -282,6 +324,7 @@ export default function App() {
   const [documentTenantId, setDocumentTenantId] = useState('');
   const [documentExpiryDate, setDocumentExpiryDate] = useState('');
   const [documentFileUrl, setDocumentFileUrl] = useState('');
+  const [documentUploading, setDocumentUploading] = useState(false);
 
   const visiblePages = useMemo(
     () => pageConfig.filter(p => user?.role === 'admin' || !p.adminOnly),
@@ -322,7 +365,6 @@ export default function App() {
 
   async function saveProperty(e: React.FormEvent) {
     e.preventDefault();
-
     const payload = {
       address: propertyAddress,
       city: propertyCity,
@@ -336,7 +378,6 @@ export default function App() {
     try {
       if (editingProperty) await api.updateProperty(editingProperty.id, payload);
       else await api.createProperty(payload);
-
       setShowPropertyForm(false);
       setEditingProperty(null);
       await load();
@@ -347,7 +388,6 @@ export default function App() {
 
   async function deleteProperty(id: string) {
     if (!confirm('Delete this property?')) return;
-
     try {
       await api.deleteProperty(id);
       await load();
@@ -382,7 +422,6 @@ export default function App() {
 
   async function saveTenant(e: React.FormEvent) {
     e.preventDefault();
-
     const payload = {
       name: tenantName,
       email: tenantEmail,
@@ -396,7 +435,6 @@ export default function App() {
     try {
       if (editingTenant) await api.updateTenant(editingTenant.id, payload);
       else await api.createTenant(payload);
-
       setShowTenantForm(false);
       setEditingTenant(null);
       await load();
@@ -407,7 +445,6 @@ export default function App() {
 
   async function deleteTenant(id: string) {
     if (!confirm('Delete this tenant?')) return;
-
     try {
       await api.deleteTenant(id);
       await load();
@@ -435,7 +472,6 @@ export default function App() {
         paid_date: editPaidDate || null,
         status: editStatus,
       });
-
       setEditingPayment(null);
       await load();
     } catch (err) {
@@ -445,7 +481,6 @@ export default function App() {
 
   async function deleteRentPayment(id: string) {
     if (!confirm('Delete this rent payment?')) return;
-
     try {
       await api.deleteRentPayment(id);
       await load();
@@ -476,9 +511,29 @@ export default function App() {
     setShowDocumentForm(true);
   }
 
+  async function uploadDocumentFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setDocumentUploading(true);
+
+    try {
+      const uploaded = await api.uploadDocument(file);
+      setDocumentFileUrl(uploaded.file_url);
+
+      if (!documentName) {
+        setDocumentName(uploaded.original_name);
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setDocumentUploading(false);
+      e.target.value = '';
+    }
+  }
+
   async function saveDocument(e: React.FormEvent) {
     e.preventDefault();
-
     const payload: DocumentPayload = {
       property_id: documentPropertyId || null,
       tenant_id: documentTenantId || null,
@@ -491,7 +546,6 @@ export default function App() {
     try {
       if (editingDocument) await api.updateDocument(editingDocument.id, payload);
       else await api.createDocument(payload);
-
       setShowDocumentForm(false);
       setEditingDocument(null);
       await load();
@@ -502,7 +556,6 @@ export default function App() {
 
   async function deleteDocument(id: string) {
     if (!confirm('Delete this document?')) return;
-
     try {
       await api.deleteDocument(id);
       await load();
@@ -513,7 +566,6 @@ export default function App() {
 
   useEffect(() => {
     const token = localStorage.getItem('pm_token');
-
     if (token) {
       api
         .me()
@@ -543,7 +595,6 @@ export default function App() {
         <button onClick={startAddProperty} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
           Add Property
         </button>
-
         <DataTable
           title="Properties"
           rows={data.properties.map(p => ({
@@ -568,7 +619,6 @@ export default function App() {
         <button onClick={startAddTenant} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
           Add Tenant
         </button>
-
         <DataTable
           title="Tenants"
           rows={data.tenants.map(t => ({
@@ -598,13 +648,12 @@ export default function App() {
           due: dateOnly(p.due_date),
           paid: dateOnly(p.paid_date) || '-',
           status: p.status,
-          actions:
-            user.role === 'admin' ? (
-              <div className="flex gap-2">
-                <button onClick={() => startEditPayment(p)} className="rounded bg-slate-700 px-3 py-1 text-xs font-semibold text-white hover:bg-slate-800">Edit</button>
-                <button onClick={() => deleteRentPayment(p.id)} className="rounded bg-red-600 px-3 py-1 text-xs font-semibold text-white hover:bg-red-700">Delete</button>
-              </div>
-            ) : null,
+          actions: user.role === 'admin' ? (
+            <div className="flex gap-2">
+              <button onClick={() => startEditPayment(p)} className="rounded bg-slate-700 px-3 py-1 text-xs font-semibold text-white hover:bg-slate-800">Edit</button>
+              <button onClick={() => deleteRentPayment(p.id)} className="rounded bg-red-600 px-3 py-1 text-xs font-semibold text-white hover:bg-red-700">Delete</button>
+            </div>
+          ) : null,
         }))}
       />
     ) : page === 'maintenance' ? (
@@ -616,7 +665,6 @@ export default function App() {
             Add Document
           </button>
         )}
-
         <DataTable
           title="Documents & compliance"
           rows={data.documents.map(d => ({
@@ -626,13 +674,12 @@ export default function App() {
             tenant: d.tenant?.name || '-',
             expiry: dateOnly(d.expiry_date) || '-',
             file: d.file_url ? 'Uploaded' : 'Not uploaded',
-            actions:
-              user.role === 'admin' ? (
-                <div className="flex gap-2">
-                  <button onClick={() => startEditDocument(d)} className="rounded bg-slate-700 px-3 py-1 text-xs font-semibold text-white hover:bg-slate-800">Edit</button>
-                  <button onClick={() => deleteDocument(d.id)} className="rounded bg-red-600 px-3 py-1 text-xs font-semibold text-white hover:bg-red-700">Delete</button>
-                </div>
-              ) : null,
+            actions: user.role === 'admin' ? (
+              <div className="flex gap-2">
+                <button onClick={() => startEditDocument(d)} className="rounded bg-slate-700 px-3 py-1 text-xs font-semibold text-white hover:bg-slate-800">Edit</button>
+                <button onClick={() => deleteDocument(d.id)} className="rounded bg-red-600 px-3 py-1 text-xs font-semibold text-white hover:bg-red-700">Delete</button>
+              </div>
+            ) : null,
           }))}
         />
       </div>
@@ -666,10 +713,13 @@ export default function App() {
           <Building2 className="text-emerald-400" />
           <strong>PropManager UK V8</strong>
         </div>
-
         <nav className="p-3 space-y-1 flex-1">
           {visiblePages.map(({ page: p, label, icon: Icon }) => (
-            <button key={p} onClick={() => setPage(p)} className={`w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm ${page === p ? 'bg-emerald-600' : 'text-slate-300 hover:bg-slate-800'}`}>
+            <button
+              key={p}
+              onClick={() => setPage(p)}
+              className={`w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm ${page === p ? 'bg-emerald-600' : 'text-slate-300 hover:bg-slate-800'}`}
+            >
               <Icon className="w-4 h-4" />
               {label}
             </button>
@@ -683,7 +733,6 @@ export default function App() {
             <h1 className="text-xl font-bold text-slate-900">{pageConfig.find(p => p.page === page)?.label}</h1>
             <p className="text-sm text-slate-500">Signed in as {user.name} ({user.role})</p>
           </div>
-
           <button
             onClick={() => {
               localStorage.removeItem('pm_token');
@@ -732,7 +781,9 @@ export default function App() {
             <input className="w-full rounded-lg border px-3 py-2" placeholder="Phone" value={tenantPhone} onChange={e => setTenantPhone(e.target.value)} />
             <select className="w-full rounded-lg border px-3 py-2" value={tenantPropertyId} onChange={e => setTenantPropertyId(e.target.value)}>
               <option value="">No property assigned</option>
-              {data.properties.map(p => <option key={p.id} value={p.id}>{p.address}</option>)}
+              {data.properties.map(p => (
+                <option key={p.id} value={p.id}>{p.address}</option>
+              ))}
             </select>
             <label className="block text-sm font-medium text-slate-700">
               Lease start
@@ -804,17 +855,43 @@ export default function App() {
             </select>
             <select className="w-full rounded-lg border px-3 py-2" value={documentPropertyId} onChange={e => setDocumentPropertyId(e.target.value)}>
               <option value="">No property</option>
-              {data.properties.map(p => <option key={p.id} value={p.id}>{p.address}</option>)}
+              {data.properties.map(p => (
+                <option key={p.id} value={p.id}>{p.address}</option>
+              ))}
             </select>
             <select className="w-full rounded-lg border px-3 py-2" value={documentTenantId} onChange={e => setDocumentTenantId(e.target.value)}>
               <option value="">No tenant</option>
-              {data.tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              {data.tenants.map(t => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
             </select>
             <label className="block text-sm font-medium text-slate-700">
               Expiry date
               <input type="date" className="mt-1 w-full rounded-lg border px-3 py-2" value={documentExpiryDate} onChange={e => setDocumentExpiryDate(e.target.value)} />
             </label>
-            <input className="w-full rounded-lg border px-3 py-2" placeholder="File URL" value={documentFileUrl} onChange={e => setDocumentFileUrl(e.target.value)} />
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-slate-700">File</label>
+              <div className="flex items-center gap-2">
+                <label className={`cursor-pointer rounded-lg px-4 py-2 text-sm font-semibold text-white ${documentUploading ? 'bg-slate-400' : 'bg-slate-700 hover:bg-slate-800'}`}>
+                  {documentUploading ? 'Uploading...' : 'Upload file'}
+                  <input
+                    type="file"
+                    className="hidden"
+                    onChange={uploadDocumentFile}
+                    disabled={documentUploading}
+                  />
+                </label>
+                <input
+                  className="flex-1 rounded-lg border px-3 py-2 text-sm"
+                  placeholder="File URL"
+                  value={documentFileUrl}
+                  onChange={e => setDocumentFileUrl(e.target.value)}
+                />
+              </div>
+              {documentFileUrl && (
+                <p className="text-xs text-slate-500">Uploaded: {documentFileUrl}</p>
+              )}
+            </div>
             <div className="flex justify-end gap-2 pt-2">
               <button type="button" onClick={() => setShowDocumentForm(false)} className="rounded-lg border px-4 py-2 text-sm">Cancel</button>
               <button type="submit" className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">Save</button>

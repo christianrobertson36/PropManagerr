@@ -53,7 +53,12 @@ export type DocumentPayload = {
   file_url?: string;
 };
 
-async function request<T>(
+export type DocumentUploadResponse = {
+  file_url: string;
+  original_name: string;
+};
+
+async function request<T = any>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
@@ -72,7 +77,6 @@ async function request<T>(
     const error = await res.json().catch(() => ({
       error: 'Request failed',
     }));
-
     throw new Error(error.error || 'Request failed');
   }
 
@@ -86,11 +90,9 @@ export const api = {
       body: JSON.stringify({ email, password }),
     }),
 
-  me: () =>
-    request<{ user: User }>('/auth/me'),
+  me: () => request<{ user: User }>('/auth/me'),
 
-  dashboard: () =>
-    request<DashboardData>('/dashboard'),
+  dashboard: () => request<DashboardData>('/dashboard'),
 
   createTicket: (
     ticket: Pick<
@@ -98,7 +100,7 @@ export const api = {
       'title' | 'description' | 'property_id' | 'urgency'
     >
   ) =>
-    request<MaintenanceTicket>('/maintenance', {
+    request('/maintenance', {
       method: 'POST',
       body: JSON.stringify(ticket),
     }),
@@ -181,4 +183,27 @@ export const api = {
     request(`/documents/${id}`, {
       method: 'DELETE',
     }),
+
+  uploadDocument: async (file: File): Promise<DocumentUploadResponse> => {
+    const token = localStorage.getItem('pm_token');
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const res = await fetch(`${API_URL}/documents/upload`, {
+      method: 'POST',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: formData,
+    });
+
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({
+        error: 'Upload failed',
+      }));
+      throw new Error(error.error || 'Upload failed');
+    }
+
+    return res.json();
+  },
 };
