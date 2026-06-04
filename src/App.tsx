@@ -673,7 +673,16 @@ export default function App() {
             property: d.property?.address || d.property_id,
             tenant: d.tenant?.name || '-',
             expiry: dateOnly(d.expiry_date) || '-',
-            file: d.file_url ? 'Uploaded' : 'Not uploaded',
+            file: d.file_url ? (
+              <a
+                href={api.documentFileUrl(d.file_url)}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-200"
+              >
+                View
+              </a>
+            ) : 'Not uploaded',
             actions: user.role === 'admin' ? (
               <div className="flex gap-2">
                 <button onClick={() => startEditDocument(d)} className="rounded bg-slate-700 px-3 py-1 text-xs font-semibold text-white hover:bg-slate-800">Edit</button>

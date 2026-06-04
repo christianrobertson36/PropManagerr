@@ -58,6 +58,20 @@ export type DocumentUploadResponse = {
   original_name: string;
 };
 
+function documentFileUrl(fileUrl: string | null | undefined): string {
+  if (!fileUrl) return '#';
+
+  if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
+    return fileUrl;
+  }
+
+  if (fileUrl.startsWith('/')) {
+    return `${API_URL}${fileUrl}`;
+  }
+
+  return `${API_URL}/${fileUrl}`;
+}
+
 async function request<T = any>(
   path: string,
   options: RequestInit = {}
@@ -84,6 +98,8 @@ async function request<T = any>(
 }
 
 export const api = {
+  documentFileUrl,
+
   login: (email: string, password: string) =>
     request<LoginResponse>('/auth/login', {
       method: 'POST',
