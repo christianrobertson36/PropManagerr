@@ -12,7 +12,7 @@ import {
   Wrench,
 } from 'lucide-react';
 import { api } from './api';
-import type { DocumentPayload } from './api';
+import type { DocumentPayload, UserAccount } from './api';
 import type {
   DashboardData,
   DocumentRecord,
@@ -326,6 +326,17 @@ export default function App() {
   const [documentFileUrl, setDocumentFileUrl] = useState('');
   const [documentUploading, setDocumentUploading] = useState(false);
 
+  const [adminUsers, setAdminUsers] = useState<UserAccount[]>([]);
+  const [adminUsersLoading, setAdminUsersLoading] = useState(false);
+  const [editingUserAccount, setEditingUserAccount] = useState<UserAccount | null>(null);
+  const [showUserAccountForm, setShowUserAccountForm] = useState(false);
+  const [accountName, setAccountName] = useState('');
+  const [accountEmail, setAccountEmail] = useState('');
+  const [accountPassword, setAccountPassword] = useState('');
+  const [accountTenantId, setAccountTenantId] = useState('');
+  const [accountRole, setAccountRole] = useState<'admin' | 'tenant'>('tenant');
+  const [accountActive, setAccountActive] = useState(true);
+
   const visiblePages = useMemo(
     () => pageConfig.filter(p => user?.role === 'admin' || !p.adminOnly),
     [user]
@@ -564,6 +575,64 @@ export default function App() {
     }
   }
 
+  async function loadAdminUsers() {
+    if (user?.role !== 'admin') return;
+
+    setAdminUsersLoading(true);
+    try {
+      setAdminUsers(await api.adminUsers());
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Unable to load accounts');
+    } finally {
+      setAdminUsersLoading(false);
+    }
+  }
+
+  function startAddUserAccount() {
+    setEditingUserAccount(null);
+    setAccountName('');
+    setAccountEmail('');
+    setAccountPassword('');
+    setAccountTenantId(data?.tenants[0]?.id || '');
+    setAccountRole('tenant');
+    setAccountActive(true);
+    setShowUserAccountForm(true);
+  }
+
+  function startEditUserAccount(account: UserAccount) {
+    setEditingUserAccount(account);
+    setAccountName(account.name || '');
+    setAccountEmail(account.email || '');
+    setAccountPassword('');
+    setAccountTenantId(account.tenant_id || '');
+    setAccountRole(account.role || 'tenant');
+    setAccountActive(account.active !== false);
+    setShowUserAccountForm(true);
+  }
+
+  async function saveUserAccount(e: React.FormEvent) {
+    e.preventDefault();
+
+    const payload = {
+      name: accountName,
+      email: accountEmail,
+      password: accountPassword || undefined,
+      role: accountRole,
+      tenant_id: accountRole === 'tenant' ? accountTenantId || null : null,
+      active: accountActive,
+    };
+
+    try {
+      if (editingUserAccount) await api.updateUserAccount(editingUserAccount.id, payload);
+      else await api.createUserAccount(payload);
+      setShowUserAccountForm(false);
+      setEditingUserAccount(null);
+      await loadAdminUsers();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Save failed');
+    }
+  }
+
   useEffect(() => {
     const token = localStorage.getItem('pm_token');
     if (token) {
@@ -580,6 +649,10 @@ export default function App() {
   useEffect(() => {
     if (user) load();
   }, [user]);
+
+  useEffect(() => {
+    if (user?.role === 'admin' && page === 'admin') loadAdminUsers();
+  }, [user, page]);
 
   if (!user) return <Login onLogin={setUser} />;
 
@@ -704,15 +777,33 @@ export default function App() {
         }))}
       />
     ) : (
-      <DataTable
-        title="Admin tools"
-        rows={[
-          { feature: 'Role based access', status: 'Enabled' },
-          { feature: 'Manual rent tracking', status: 'Enabled' },
-          { feature: 'Audit log schema', status: 'Included' },
-          { feature: 'TrueNAS Docker Compose', status: 'Included' },
-        ]}
-      />
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">Tenant login accounts</h2>
+            <p className="text-sm text-slate-500">Create and edit tenant portal logins linked to tenant records.</p>
+          </div>
+          <button onClick={startAddUserAccount} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
+            Add Login Account
+          </button>
+        </div>
+
+        <DataTable
+          title={adminUsersLoading ? 'Loading accounts...' : 'Login accounts'}
+          rows={adminUsers.map(account => ({
+            name: account.name,
+            email: account.email,
+            role: account.role,
+            tenant: account.tenant?.name || '-',
+            status: account.active ? 'Active' : 'Inactive',
+            actions: (
+              <div className="flex gap-2">
+                <button onClick={() => startEditUserAccount(account)} className="rounded bg-slate-700 px-3 py-1 text-xs font-semibold text-white hover:bg-slate-800">Edit</button>
+              </div>
+            ),
+          }))}
+        />
+      </div>
     );
 
   return (
@@ -841,6 +932,44 @@ export default function App() {
             </label>
             <div className="flex justify-end gap-2 pt-2">
               <button type="button" onClick={() => setEditingPayment(null)} className="rounded-lg border px-4 py-2 text-sm">Cancel</button>
+              <button type="submit" className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">Save</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {showUserAccountForm && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4">
+          <form onSubmit={saveUserAccount} className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl space-y-4">
+            <h2 className="text-lg font-bold text-slate-900">{editingUserAccount ? 'Edit login account' : 'Add login account'}</h2>
+            <input required className="w-full rounded-lg border px-3 py-2" placeholder="Name" value={accountName} onChange={e => setAccountName(e.target.value)} />
+            <input required type="email" className="w-full rounded-lg border px-3 py-2" placeholder="Email / login" value={accountEmail} onChange={e => setAccountEmail(e.target.value)} />
+            <input
+              required={!editingUserAccount}
+              type="password"
+              className="w-full rounded-lg border px-3 py-2"
+              placeholder={editingUserAccount ? 'New password (leave blank to keep current)' : 'Password'}
+              value={accountPassword}
+              onChange={e => setAccountPassword(e.target.value)}
+            />
+            <select className="w-full rounded-lg border px-3 py-2" value={accountRole} onChange={e => setAccountRole(e.target.value as 'admin' | 'tenant')}>
+              <option value="tenant">Tenant</option>
+              <option value="admin">Admin</option>
+            </select>
+            {accountRole === 'tenant' && (
+              <select required className="w-full rounded-lg border px-3 py-2" value={accountTenantId} onChange={e => setAccountTenantId(e.target.value)}>
+                <option value="">Select tenant</option>
+                {data.tenants.map(t => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+            )}
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+              <input type="checkbox" checked={accountActive} onChange={e => setAccountActive(e.target.checked)} />
+              Active login
+            </label>
+            <div className="flex justify-end gap-2 pt-2">
+              <button type="button" onClick={() => setShowUserAccountForm(false)} className="rounded-lg border px-4 py-2 text-sm">Cancel</button>
               <button type="submit" className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">Save</button>
             </div>
           </form>

@@ -1,4 +1,4 @@
-import type { DashboardData, MaintenanceTicket, User } from './types';
+import type { DashboardData, MaintenanceTicket, Tenant, User } from './types';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 
@@ -56,6 +56,25 @@ export type DocumentPayload = {
 export type DocumentUploadResponse = {
   file_url: string;
   original_name: string;
+};
+
+export type UserAccount = {
+  id: string;
+  name: string;
+  email: string;
+  role: 'admin' | 'tenant';
+  tenant_id: string | null;
+  active: boolean;
+  tenant?: Tenant | null;
+};
+
+export type UserAccountPayload = {
+  name?: string;
+  email?: string;
+  password?: string;
+  role?: 'admin' | 'tenant';
+  tenant_id?: string | null;
+  active?: boolean;
 };
 
 function documentFileUrl(fileUrl: string | null | undefined): string {
@@ -198,6 +217,20 @@ export const api = {
   deleteDocument: (id: string) =>
     request(`/documents/${id}`, {
       method: 'DELETE',
+    }),
+
+  adminUsers: () => request<UserAccount[]>('/admin/users'),
+
+  createUserAccount: (account: UserAccountPayload) =>
+    request<UserAccount>('/admin/users', {
+      method: 'POST',
+      body: JSON.stringify(account),
+    }),
+
+  updateUserAccount: (id: string, account: UserAccountPayload) =>
+    request<UserAccount>(`/admin/users/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(account),
     }),
 
   uploadDocument: async (file: File): Promise<DocumentUploadResponse> => {
