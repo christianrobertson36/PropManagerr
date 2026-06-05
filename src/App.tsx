@@ -50,7 +50,7 @@ type PageConfig = {
   adminOnly?: boolean;
 };
 
-const APP_VERSION = 'v36';
+const APP_VERSION = 'v37';
 
 const emptyDashboard: DashboardData = {
   properties: [],
