@@ -47,7 +47,7 @@ type PageConfig = {
   adminOnly?: boolean;
 };
 
-const APP_VERSION = 'v26';
+const APP_VERSION = 'v27';
 
 const emptyDashboard: DashboardData = {
   properties: [],
@@ -190,6 +190,7 @@ function Login({ onLogin }: { onLogin: (user: User) => void }) {
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    setDocumentError('');
     setLoading(true);
     setError('');
 
@@ -534,6 +535,7 @@ function Properties({ data, refresh }: { data: DashboardData; refresh: () => Pro
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    setDocumentError('');
     if (editing) await api.updateProperty(editing.id, form);
     else await api.createProperty(form);
     reset();
@@ -598,6 +600,7 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    setDocumentError('');
     const payload = { ...form, property_id: form.property_id || null, lease_start: form.lease_start || null, lease_end: form.lease_end || null };
     if (editing) await api.updateTenant(editing.id, payload);
     else await api.createTenant(payload);
@@ -661,6 +664,7 @@ function Rent({ data, refresh, user }: { data: DashboardData; refresh: () => Pro
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    setDocumentError('');
     if (!editing) return;
     await api.updatePayment(editing.id, { ...form, paid_date: form.paid_date || null });
     setEditing(null);
@@ -744,6 +748,7 @@ function Maintenance({ data, refresh, user }: { data: DashboardData; refresh: ()
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    setDocumentError('');
     if (!repairPropertyId) return;
 
     await api.createTicket({ title, description, property_id: repairPropertyId, urgency: 'medium' });
@@ -815,6 +820,8 @@ function Maintenance({ data, refresh, user }: { data: DashboardData; refresh: ()
 function Documents({ data, refresh, user }: { data: DashboardData; refresh: () => Promise<void>; user: User }) {
   const [editing, setEditing] = useState<DocumentRecord | null>(null);
   const [file, setFile] = useState<File | null>(null);
+  const [documentError, setDocumentError] = useState('');
+  const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
   const [form, setForm] = useState<DocumentPayload>({ property_id: '', tenant_id: '', name: '', doc_type: 'other', expiry_date: null, file_url: '' });
 
   const currentTenant = user.role === 'tenant'
@@ -883,6 +890,7 @@ function Documents({ data, refresh, user }: { data: DashboardData; refresh: () =
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    setDocumentError('');
     let fileUrl = form.file_url || '';
     if (file) {
       const uploaded = await api.uploadDocument(file);
@@ -905,12 +913,31 @@ function Documents({ data, refresh, user }: { data: DashboardData; refresh: () =
   }
 
   async function remove(id: string) {
-    await api.deleteDocument(id);
-    await refresh();
+    const confirmed = window.confirm('Delete this document record? This removes it from PropManagerr and tenants will no longer see it.');
+    if (!confirmed) return;
+
+    setDocumentError('');
+    setDeletingDocumentId(id);
+
+    try {
+      await api.deleteDocument(id);
+      if (editing?.id === id) reset();
+      await refresh();
+    } catch (err) {
+      setDocumentError(err instanceof Error ? err.message : 'Could not delete document');
+    } finally {
+      setDeletingDocumentId(null);
+    }
   }
 
   return (
     <div className="space-y-6">
+      {documentError && (
+        <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+          {documentError}
+        </div>
+      )}
+
       {user.role === 'admin' && (
         <CrudLayout title={editing ? 'Edit document' : 'Add document'} onSubmit={submit} onCancel={reset} editing={Boolean(editing)} hideTable>
           <Select<string> label="Tenant (optional - auto-fills property)" value={fieldValue(form.tenant_id)} onChange={setDocumentTenant}>
@@ -952,7 +979,14 @@ function Documents({ data, refresh, user }: { data: DashboardData; refresh: () =
           document.tenant?.name || tenantName(document.tenant_id),
           dateOnly(document.expiry_date) || '-',
           document.file_url ? <a key={`${document.id}-file`} className="font-medium text-emerald-700 hover:underline" href={api.documentFileUrl(document.file_url)} target="_blank" rel="noreferrer">View</a> : 'Not uploaded',
-          user.role === 'admin' ? <Actions onEdit={() => startEdit(document)} onDelete={() => remove(document.id)} /> : '-',
+          user.role === 'admin' ? (
+            <div className="flex gap-2">
+              <Button variant="secondary" onClick={() => startEdit(document)}>Edit</Button>
+              <Button variant="danger" disabled={deletingDocumentId === document.id} onClick={() => remove(document.id)}>
+                {deletingDocumentId === document.id ? 'Deleting...' : 'Delete'}
+              </Button>
+            </div>
+          ) : '-',
         ])}
       />
     </div>
@@ -975,6 +1009,7 @@ function Expenses({ data, refresh }: { data: DashboardData; refresh: () => Promi
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    setDocumentError('');
     const payload = { ...form, property_id: form.property_id || null };
     if (editing) await api.updateExpense(editing.id, payload);
     else await api.createExpense(payload);
@@ -1039,6 +1074,7 @@ function Admin({ data }: { data: DashboardData; refresh: () => Promise<void> }) 
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    setDocumentError('');
     const payload = { ...form, tenant_id: form.role === 'tenant' ? form.tenant_id || null : null };
     if (editing && !payload.password) delete payload.password;
     if (editing) await api.updateAdminAccount(editing.id, payload);

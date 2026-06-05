@@ -1,5 +1,6 @@
 import { initDatabase } from './initDb.js';
 import 'dotenv/config';
+import fs from 'fs/promises';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -432,7 +433,20 @@ app.patch('/documents/:id', requireAuth, requireAdmin, async (req, res) => {
 
 app.delete('/documents/:id', requireAuth, requireAdmin, async (req, res) => {
   const { rows } = await query('delete from documents where id=$1 returning *', [req.params.id]);
-  sendOneOr404(res, rows, 'Document');
+  const deleted = rows[0];
+
+  if (!deleted) {
+    return res.status(404).json({ error: 'Document not found' });
+  }
+
+  if (deleted.file_url && deleted.file_url.startsWith('/uploads/documents/')) {
+    const filename = deleted.file_url.replace('/uploads/documents/', '');
+    if (filename && !filename.includes('/') && !filename.includes('..')) {
+      await fs.unlink(`/app/uploads/documents/${filename}`).catch(() => undefined);
+    }
+  }
+
+  return res.json(deleted);
 });
 
 app.post('/documents/upload', requireAuth, requireAdmin, upload.single('file'), (req, res) => {
