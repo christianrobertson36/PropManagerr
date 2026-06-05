@@ -47,7 +47,7 @@ type PageConfig = {
   adminOnly?: boolean;
 };
 
-const APP_VERSION = 'v29';
+const APP_VERSION = 'v30';
 
 const emptyDashboard: DashboardData = {
   properties: [],
@@ -190,7 +190,6 @@ function Login({ onLogin }: { onLogin: (user: User) => void }) {
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    setDocumentError('');
     setLoading(true);
     setError('');
 
@@ -535,7 +534,6 @@ function Properties({ data, refresh }: { data: DashboardData; refresh: () => Pro
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    setDocumentError('');
     if (editing) await api.updateProperty(editing.id, form);
     else await api.createProperty(form);
     reset();
@@ -600,7 +598,6 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    setDocumentError('');
     const payload = { ...form, property_id: form.property_id || null, lease_start: form.lease_start || null, lease_end: form.lease_end || null };
     if (editing) await api.updateTenant(editing.id, payload);
     else await api.createTenant(payload);
@@ -664,7 +661,6 @@ function Rent({ data, refresh, user }: { data: DashboardData; refresh: () => Pro
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    setDocumentError('');
     if (!editing) return;
     await api.updatePayment(editing.id, { ...form, paid_date: form.paid_date || null });
     setEditing(null);
@@ -748,7 +744,6 @@ function Maintenance({ data, refresh, user }: { data: DashboardData; refresh: ()
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    setDocumentError('');
     if (!repairPropertyId) return;
 
     await api.createTicket({ title, description, property_id: repairPropertyId, urgency: 'medium' });
@@ -1009,7 +1004,6 @@ function Expenses({ data, refresh }: { data: DashboardData; refresh: () => Promi
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    setDocumentError('');
     const payload = { ...form, property_id: form.property_id || null };
     if (editing) await api.updateExpense(editing.id, payload);
     else await api.createExpense(payload);
@@ -1074,7 +1068,6 @@ function Admin({ data }: { data: DashboardData; refresh: () => Promise<void> }) 
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    setDocumentError('');
     const payload = { ...form, tenant_id: form.role === 'tenant' ? form.tenant_id || null : null };
     if (editing && !payload.password) delete payload.password;
     if (editing) await api.updateAdminAccount(editing.id, payload);
