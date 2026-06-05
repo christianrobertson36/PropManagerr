@@ -815,7 +815,7 @@ export default function App() {
       <aside className="w-64 bg-slate-950 text-white hidden md:flex flex-col">
         <div className="p-5 flex items-center gap-3 border-b border-slate-800">
           <Building2 className="text-emerald-400" />
-          <strong>PropManager UK V8</strong>
+          <strong>PropManagerr</strong>
         </div>
         <nav className="p-3 space-y-1 flex-1">
           {visiblePages.map(({ page: p, label, icon: Icon }) => (
@@ -829,6 +829,9 @@ export default function App() {
             </button>
           ))}
         </nav>
+        <div className="border-t border-slate-800 px-5 py-3 text-xs text-slate-400">
+          Version v16
+        </div>
       </aside>
 
       <main className="flex-1">
