@@ -181,7 +181,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
   const docWhere =
     req.user.role === 'admin'
       ? ''
-      : ' where tenant_id=$1 or property_id in (select property_id from tenants where id=$1) or (tenant_id is null and property_id is null)';
+      : ' where d.tenant_id=$1 or d.property_id in (select property_id from tenants where id=$1) or (d.tenant_id is null and d.property_id is null)';
   const expenseWhere = req.user.role === 'admin' ? '' : ' where false';
 
   const [properties, tenants, rentPayments, maintenanceTickets, documents, expenses] = await Promise.all([
