@@ -482,6 +482,12 @@ adminCrud(
   'Expense'
 );
 
+
+async function applyRuntimeMigrations() {
+  await query('alter table documents alter column property_id drop not null');
+}
+
 const port = Number(process.env.PORT || 3000);
 await initDatabase();
+await applyRuntimeMigrations();
 app.listen(port, () => console.log(`PropManager API listening on ${port}`));
