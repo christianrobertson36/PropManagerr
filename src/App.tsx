@@ -47,7 +47,7 @@ type PageConfig = {
   adminOnly?: boolean;
 };
 
-const APP_VERSION = 'v22';
+const APP_VERSION = 'v25';
 
 const emptyDashboard: DashboardData = {
   properties: [],
@@ -239,15 +239,33 @@ function Dashboard({ data }: { data: DashboardData; user: User }) {
   const [updates, setUpdates] = useState<ComplianceUpdate[]>([]);
   const [updatesError, setUpdatesError] = useState('');
 
-  const paid = data.rentPayments.filter(payment => payment.status === 'paid').reduce((sum, payment) => sum + payment.amount, 0);
-  const outstanding = data.rentPayments.filter(payment => payment.status !== 'paid').reduce((sum, payment) => sum + payment.amount, 0);
-  const openRepairs = data.maintenanceTickets.filter(ticket => ticket.status !== 'resolved').length;
-  const overduePayments = data.rentPayments.filter(payment => payment.status === 'overdue').length;
+  const paidPayments = data.rentPayments.filter(payment => payment.status === 'paid');
+  const outstandingPayments = data.rentPayments.filter(payment => payment.status !== 'paid');
+  const overduePayments = data.rentPayments.filter(payment => payment.status === 'overdue');
+  const pendingPayments = data.rentPayments.filter(payment => payment.status === 'pending');
+  const paid = paidPayments.reduce((sum, payment) => sum + payment.amount, 0);
+  const outstanding = outstandingPayments.reduce((sum, payment) => sum + payment.amount, 0);
+  const overdueAmount = overduePayments.reduce((sum, payment) => sum + payment.amount, 0);
+  const totalExpected = paid + outstanding;
+  const collectionRate = totalExpected > 0 ? Math.round((paid / totalExpected) * 100) : 0;
+  const totalMonthlyRent = data.properties.reduce((sum, property) => sum + Number(property.monthly_rent || 0), 0);
+  const activeProperties = data.properties.filter(property => property.status === 'active').length;
   const vacantProperties = data.properties.filter(property => property.status === 'vacant').length;
-  const expiring = data.documents.filter(document => {
+  const openRepairs = data.maintenanceTickets.filter(ticket => ticket.status !== 'resolved').length;
+  const expiring = data.documents
+    .filter(document => {
+      const days = daysUntil(document.expiry_date);
+      return days !== null && days <= 90;
+    })
+    .sort((a, b) => (daysUntil(a.expiry_date) || 0) - (daysUntil(b.expiry_date) || 0));
+  const urgentCompliance = expiring.filter(document => {
     const days = daysUntil(document.expiry_date);
-    return days !== null && days <= 90;
-  });
+    return days !== null && days <= 30;
+  }).length;
+  const recentRepairs = [...data.maintenanceTickets]
+    .sort((a, b) => new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime())
+    .slice(0, 5);
+  const propertySnapshot = data.properties.slice(0, 6);
 
   useEffect(() => {
     let cancelled = false;
@@ -265,28 +283,88 @@ function Dashboard({ data }: { data: DashboardData; user: User }) {
     };
   }, []);
 
+  function updateBadgeClass(severity: ComplianceUpdate['severity']) {
+    if (severity === 'required') return 'bg-rose-100 text-rose-700';
+    if (severity === 'important') return 'bg-amber-100 text-amber-700';
+    return 'bg-slate-100 text-slate-700';
+  }
+
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-4">
-        <Stat label="Properties" value={String(data.properties.length)} icon={Building2} />
-        <Stat label="Rent paid" value={money(paid)} icon={Receipt} />
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 p-6 text-white shadow-sm">
+        <div className="flex flex-col justify-between gap-6 lg:flex-row lg:items-end">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-wide text-emerald-300">Portfolio overview</p>
+            <h2 className="mt-2 text-3xl font-bold">Landlord dashboard</h2>
+            <p className="mt-2 max-w-2xl text-sm text-slate-300">
+              Track rent, repairs, compliance documents and legal updates from one place.
+            </p>
+          </div>
+          <div className="grid grid-cols-3 gap-3 text-center">
+            <div className="rounded-xl bg-white/10 px-4 py-3 backdrop-blur">
+              <p className="text-2xl font-bold">{activeProperties}</p>
+              <p className="text-xs text-slate-300">Active</p>
+            </div>
+            <div className="rounded-xl bg-white/10 px-4 py-3 backdrop-blur">
+              <p className="text-2xl font-bold">{vacantProperties}</p>
+              <p className="text-xs text-slate-300">Vacant</p>
+            </div>
+            <div className="rounded-xl bg-white/10 px-4 py-3 backdrop-blur">
+              <p className="text-2xl font-bold">{collectionRate}%</p>
+              <p className="text-xs text-slate-300">Collected</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <Stat label="Monthly rent roll" value={money(totalMonthlyRent)} icon={Building2} />
+        <Stat label="Rent collected" value={money(paid)} icon={Receipt} />
         <Stat label="Outstanding" value={money(outstanding)} icon={AlertTriangle} />
         <Stat label="Open repairs" value={String(openRepairs)} icon={Wrench} />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-3">
         <div className="space-y-6 xl:col-span-2">
+          <Card title="Rent collection">
+            <div className="space-y-4">
+              <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
+                <div>
+                  <p className="text-sm text-slate-500">Collection rate</p>
+                  <p className="text-3xl font-bold text-slate-900">{collectionRate}%</p>
+                </div>
+                <div className="grid grid-cols-3 gap-3 text-sm">
+                  <div className="rounded-lg bg-emerald-50 p-3 text-emerald-800">
+                    <p className="font-semibold">Paid</p>
+                    <p>{money(paid)}</p>
+                  </div>
+                  <div className="rounded-lg bg-amber-50 p-3 text-amber-800">
+                    <p className="font-semibold">Pending</p>
+                    <p>{pendingPayments.length}</p>
+                  </div>
+                  <div className="rounded-lg bg-rose-50 p-3 text-rose-800">
+                    <p className="font-semibold">Overdue</p>
+                    <p>{money(overdueAmount)}</p>
+                  </div>
+                </div>
+              </div>
+              <div className="h-3 overflow-hidden rounded-full bg-slate-100">
+                <div className="h-full rounded-full bg-emerald-500" style={{ width: `${collectionRate}%` }} />
+              </div>
+            </div>
+          </Card>
+
           <Card title="Needs attention">
             <div className="grid gap-3 md:grid-cols-3">
               <div className="rounded-xl border border-rose-100 bg-rose-50 p-4">
                 <p className="text-xs font-semibold uppercase tracking-wide text-rose-700">Overdue rent</p>
-                <p className="mt-2 text-2xl font-bold text-rose-900">{overduePayments}</p>
-                <p className="text-sm text-rose-700">payments marked overdue</p>
+                <p className="mt-2 text-2xl font-bold text-rose-900">{overduePayments.length}</p>
+                <p className="text-sm text-rose-700">payments need chasing</p>
               </div>
               <div className="rounded-xl border border-amber-100 bg-amber-50 p-4">
                 <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Compliance</p>
-                <p className="mt-2 text-2xl font-bold text-amber-900">{expiring.length}</p>
-                <p className="text-sm text-amber-700">documents expiring soon</p>
+                <p className="mt-2 text-2xl font-bold text-amber-900">{urgentCompliance}</p>
+                <p className="text-sm text-amber-700">documents due within 30 days</p>
               </div>
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Vacant</p>
@@ -296,12 +374,47 @@ function Dashboard({ data }: { data: DashboardData; user: User }) {
             </div>
           </Card>
 
+          <Card title="Property snapshot">
+            {propertySnapshot.length === 0 ? (
+              <p className="text-sm text-slate-600">No properties found.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-slate-200 text-sm">
+                  <thead>
+                    <tr>
+                      <th className="px-3 py-2 text-left font-semibold text-slate-700">Property</th>
+                      <th className="px-3 py-2 text-left font-semibold text-slate-700">Tenant</th>
+                      <th className="px-3 py-2 text-left font-semibold text-slate-700">Rent</th>
+                      <th className="px-3 py-2 text-left font-semibold text-slate-700">Status</th>
+                      <th className="px-3 py-2 text-left font-semibold text-slate-700">Docs</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {propertySnapshot.map(property => {
+                      const tenant = data.tenants.find(row => row.property_id === property.id);
+                      const docsDue = expiring.filter(document => document.property_id === property.id).length;
+                      return (
+                        <tr key={property.id}>
+                          <td className="px-3 py-2 text-slate-800">{property.address}</td>
+                          <td className="px-3 py-2 text-slate-600">{tenant?.name || '-'}</td>
+                          <td className="px-3 py-2 text-slate-600">{money(property.monthly_rent)}</td>
+                          <td className="px-3 py-2 text-slate-600">{property.status}</td>
+                          <td className="px-3 py-2 text-slate-600">{docsDue > 0 ? `${docsDue} due` : 'OK'}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+
           <Card title="Compliance reminders">
             {expiring.length === 0 ? (
               <p className="text-sm text-slate-600">No documents expiring in the next 90 days.</p>
             ) : (
               <div className="space-y-2">
-                {expiring.map(document => {
+                {expiring.slice(0, 6).map(document => {
                   const days = daysUntil(document.expiry_date);
                   const overdue = days !== null && days < 0;
                   return (
@@ -321,46 +434,69 @@ function Dashboard({ data }: { data: DashboardData; user: User }) {
           </Card>
         </div>
 
-        <Card title="Compliance Updates / Legal Changes">
-          <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
-            Official-source links for awareness only. This is not legal advice.
-          </div>
-
-          {updatesError && (
-            <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-              {updatesError}
+        <div className="space-y-6">
+          <Card title="Compliance Updates / Legal Changes">
+            <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+              Official-source links for awareness only. This is not legal advice.
             </div>
-          )}
 
-          {updates.length === 0 && !updatesError ? (
-            <p className="text-sm text-slate-600">Loading compliance updates...</p>
-          ) : (
-            <div className="space-y-3">
-              {updates.map(update => (
-                <a
-                  key={update.id}
-                  href={update.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="block rounded-xl border border-slate-200 p-4 transition hover:border-emerald-300 hover:bg-emerald-50"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-slate-900">{update.title}</p>
-                      <p className="mt-1 text-sm text-slate-600">{update.summary}</p>
+            {updatesError && (
+              <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                {updatesError}
+              </div>
+            )}
+
+            {updates.length === 0 && !updatesError ? (
+              <p className="text-sm text-slate-600">Loading compliance updates...</p>
+            ) : (
+              <div className="space-y-3">
+                {updates.map(update => (
+                  <a
+                    key={update.id}
+                    href={update.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block rounded-xl border border-slate-200 p-4 transition hover:border-emerald-300 hover:bg-emerald-50"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-slate-900">{update.title}</p>
+                        <p className="mt-1 text-sm text-slate-600">{update.summary}</p>
+                      </div>
+                      <span className={`rounded-full px-2 py-1 text-xs font-medium ${updateBadgeClass(update.severity)}`}>{update.severity}</span>
                     </div>
-                    <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">{update.severity}</span>
+                    <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
+                      <span>{update.source}</span>
+                      {update.effective_date && <span>Effective: {dateOnly(update.effective_date)}</span>}
+                      {update.last_checked && <span>Checked: {dateOnly(update.last_checked)}</span>}
+                    </div>
+                  </a>
+                ))}
+              </div>
+            )}
+          </Card>
+
+          <Card title="Recent repairs">
+            {recentRepairs.length === 0 ? (
+              <p className="text-sm text-slate-600">No repair tickets found.</p>
+            ) : (
+              <div className="space-y-3">
+                {recentRepairs.map(ticket => (
+                  <div key={ticket.id} className="rounded-xl border border-slate-200 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-medium text-slate-900">{ticket.title}</p>
+                        <p className="text-sm text-slate-500">{ticket.property?.address || ticket.property_id}</p>
+                      </div>
+                      <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">{ticket.status}</span>
+                    </div>
+                    <p className="mt-2 text-xs text-slate-500">Created {dateOnly(ticket.created_at)}</p>
                   </div>
-                  <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
-                    <span>{update.source}</span>
-                    {update.effective_date && <span>Effective: {dateOnly(update.effective_date)}</span>}
-                    {update.last_checked && <span>Checked: {dateOnly(update.last_checked)}</span>}
-                  </div>
-                </a>
-              ))}
-            </div>
-          )}
-        </Card>
+                ))}
+              </div>
+            )}
+          </Card>
+        </div>
       </div>
     </div>
   );
