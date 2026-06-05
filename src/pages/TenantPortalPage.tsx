@@ -81,7 +81,12 @@ export function TenantPortal({ data, user }: { data: DashboardData; user: User }
   );
   const documents = data.documents.filter(document => {
     const documentPropertyId = document.property_id || document.property?.id;
-    return document.tenant_id === user.tenant_id || Boolean(tenantPropertyId && documentPropertyId === tenantPropertyId);
+    const isGlobalDocument = !document.tenant_id && !documentPropertyId;
+    return (
+      isGlobalDocument ||
+      document.tenant_id === user.tenant_id ||
+      Boolean(tenantPropertyId && documentPropertyId === tenantPropertyId)
+    );
   });
   const repairs = data.maintenanceTickets.filter(ticket => {
     const ticketPropertyId = ticket.property_id || ticket.property?.id;

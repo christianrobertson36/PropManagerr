@@ -47,7 +47,7 @@ type PageConfig = {
   adminOnly?: boolean;
 };
 
-const APP_VERSION = 'v30';
+const APP_VERSION = 'v31';
 
 const emptyDashboard: DashboardData = {
   properties: [],
@@ -817,6 +817,7 @@ function Documents({ data, refresh, user }: { data: DashboardData; refresh: () =
   const [file, setFile] = useState<File | null>(null);
   const [documentError, setDocumentError] = useState('');
   const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
+  const [documentAudience, setDocumentAudience] = useState<'all' | 'property' | 'tenant'>('all');
   const [form, setForm] = useState<DocumentPayload>({ property_id: '', tenant_id: '', name: '', doc_type: 'other', expiry_date: null, file_url: '' });
 
   const currentTenant = user.role === 'tenant'
@@ -827,17 +828,22 @@ function Documents({ data, refresh, user }: { data: DashboardData; refresh: () =
   const visibleDocuments = user.role === 'tenant'
     ? data.documents.filter(document => {
         const documentPropertyId = document.property_id || document.property?.id;
-        return document.tenant_id === user.tenant_id || Boolean(currentTenantPropertyId && documentPropertyId === currentTenantPropertyId);
+        const isGlobalDocument = !document.tenant_id && !documentPropertyId;
+        return (
+          isGlobalDocument ||
+          document.tenant_id === user.tenant_id ||
+          Boolean(currentTenantPropertyId && documentPropertyId === currentTenantPropertyId)
+        );
       })
     : data.documents;
 
   function propertyAddress(propertyId: string | null | undefined) {
-    if (!propertyId) return '-';
+    if (!propertyId) return 'All properties';
     return data.properties.find(property => property.id === propertyId)?.address || propertyId;
   }
 
   function tenantName(tenantId: string | null | undefined) {
-    if (!tenantId) return '-';
+    if (!tenantId) return 'All tenants';
     return data.tenants.find(tenant => tenant.id === tenantId)?.name || tenantId;
   }
 
@@ -847,28 +853,48 @@ function Documents({ data, refresh, user }: { data: DashboardData; refresh: () =
     return tenant?.property_id || tenant?.property?.id || '';
   }
 
+  function setAudience(audience: 'all' | 'property' | 'tenant' | '') {
+    const nextAudience = audience || 'all';
+    setDocumentAudience(nextAudience);
+
+    if (nextAudience === 'all') {
+      setForm({ ...form, tenant_id: null, property_id: null });
+      return;
+    }
+
+    if (nextAudience === 'property') {
+      setForm({ ...form, tenant_id: null, property_id: form.property_id || '' });
+      return;
+    }
+
+    setForm({ ...form, tenant_id: form.tenant_id || '', property_id: tenantPropertyId(form.tenant_id || '') || form.property_id || '' });
+  }
+
   function setDocumentTenant(tenantId: string) {
     const nextPropertyId = tenantPropertyId(tenantId);
     setForm({
       ...form,
       tenant_id: tenantId || null,
-      property_id: nextPropertyId || form.property_id || null,
+      property_id: nextPropertyId || null,
     });
   }
 
   function setDocumentProperty(propertyId: string) {
-    const selectedTenantPropertyId = tenantPropertyId(form.tenant_id || '');
     setForm({
       ...form,
       property_id: propertyId || null,
-      tenant_id: selectedTenantPropertyId && propertyId && selectedTenantPropertyId !== propertyId ? null : form.tenant_id,
+      tenant_id: documentAudience === 'property' ? null : form.tenant_id,
     });
   }
 
   function startEdit(document: DocumentRecord) {
+    const documentPropertyId = document.property_id || document.property?.id || '';
+    const nextAudience = document.tenant_id ? 'tenant' : documentPropertyId ? 'property' : 'all';
     setEditing(document);
+    setDocumentAudience(nextAudience);
+    setDocumentError('');
     setForm({
-      property_id: document.property_id || document.property?.id || '',
+      property_id: documentPropertyId,
       tenant_id: document.tenant_id || '',
       name: document.name,
       doc_type: document.doc_type,
@@ -880,31 +906,54 @@ function Documents({ data, refresh, user }: { data: DashboardData; refresh: () =
   function reset() {
     setEditing(null);
     setFile(null);
+    setDocumentAudience('all');
+    setDocumentError('');
     setForm({ property_id: '', tenant_id: '', name: '', doc_type: 'other', expiry_date: null, file_url: '' });
   }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     setDocumentError('');
-    let fileUrl = form.file_url || '';
-    if (file) {
-      const uploaded = await api.uploadDocument(file);
-      fileUrl = uploaded.file_url;
+
+    try {
+      let fileUrl = form.file_url || '';
+      if (file) {
+        const uploaded = await api.uploadDocument(file);
+        fileUrl = uploaded.file_url;
+      }
+
+      const selectedTenantId = documentAudience === 'tenant' ? form.tenant_id || null : null;
+      const selectedPropertyId = documentAudience === 'tenant'
+        ? tenantPropertyId(form.tenant_id || '') || form.property_id || null
+        : documentAudience === 'property'
+          ? form.property_id || null
+          : null;
+
+      if (documentAudience === 'tenant' && !selectedTenantId) {
+        setDocumentError('Choose a tenant, or change Share with to All tenants.');
+        return;
+      }
+
+      if (documentAudience === 'property' && !selectedPropertyId) {
+        setDocumentError('Choose a property, or change Share with to All tenants.');
+        return;
+      }
+
+      const payload = {
+        ...form,
+        property_id: selectedPropertyId,
+        tenant_id: selectedTenantId,
+        expiry_date: form.expiry_date || null,
+        file_url: fileUrl,
+      };
+
+      if (editing) await api.updateDocument(editing.id, payload);
+      else await api.createDocument(payload);
+      reset();
+      await refresh();
+    } catch (err) {
+      setDocumentError(err instanceof Error ? err.message : 'Could not save document');
     }
-
-    const autoPropertyId = tenantPropertyId(form.tenant_id || '') || form.property_id || null;
-    const payload = {
-      ...form,
-      property_id: autoPropertyId,
-      tenant_id: form.tenant_id || null,
-      expiry_date: form.expiry_date || null,
-      file_url: fileUrl,
-    };
-
-    if (editing) await api.updateDocument(editing.id, payload);
-    else await api.createDocument(payload);
-    reset();
-    await refresh();
   }
 
   async function remove(id: string) {
@@ -935,17 +984,38 @@ function Documents({ data, refresh, user }: { data: DashboardData; refresh: () =
 
       {user.role === 'admin' && (
         <CrudLayout title={editing ? 'Edit document' : 'Add document'} onSubmit={submit} onCancel={reset} editing={Boolean(editing)} hideTable>
-          <Select<string> label="Tenant (optional - auto-fills property)" value={fieldValue(form.tenant_id)} onChange={setDocumentTenant}>
-            <option value="">No tenant / property-wide document</option>
-            {data.tenants.map(tenant => <option key={tenant.id} value={tenant.id}>{tenant.name}</option>)}
+          <Select<'all' | 'property' | 'tenant'> label="Share with" value={documentAudience} onChange={setAudience}>
+            <option value="all">All tenants</option>
+            <option value="tenant">One tenant</option>
+            <option value="property">One property</option>
           </Select>
-          <Select<string> label="Property" value={fieldValue(form.property_id)} onChange={setDocumentProperty}>
-            <option value="">No property</option>
-            {data.properties.map(property => <option key={property.id} value={property.id}>{property.address}</option>)}
-          </Select>
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
-            Choose a tenant to link the document to that tenant and automatically use their assigned property. For property-wide documents, leave tenant blank and choose the property only.
-          </div>
+
+          {documentAudience === 'tenant' && (
+            <Select<string> label="Tenant (auto-fills property)" value={fieldValue(form.tenant_id)} onChange={setDocumentTenant}>
+              <option value="">Choose tenant</option>
+              {data.tenants.map(tenant => <option key={tenant.id} value={tenant.id}>{tenant.name}</option>)}
+            </Select>
+          )}
+
+          {documentAudience === 'property' && (
+            <Select<string> label="Property" value={fieldValue(form.property_id)} onChange={setDocumentProperty}>
+              <option value="">Choose property</option>
+              {data.properties.map(property => <option key={property.id} value={property.id}>{property.address}</option>)}
+            </Select>
+          )}
+
+          {documentAudience === 'tenant' && form.property_id && (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+              Property auto-filled: <span className="font-medium text-slate-800">{propertyAddress(form.property_id)}</span>
+            </div>
+          )}
+
+          {documentAudience === 'all' && (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">
+              This document will be visible to every tenant. It will not be tied to one property or one tenant.
+            </div>
+          )}
+
           <Input label="Name" value={fieldValue(form.name)} onChange={value => setForm({ ...form, name: value })} required />
           <Select<DocType> label="Document type" value={(form.doc_type as DocType) || 'other'} onChange={value => setForm({ ...form, doc_type: value || 'other' })}>
             <option value="tenancy_agreement">Tenancy agreement</option>
