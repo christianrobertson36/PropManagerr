@@ -374,19 +374,66 @@ adminCrud(
   'Maintenance ticket'
 );
 
-adminCrud(
-  '/documents',
-  'documents',
-  ['property_id', 'tenant_id', 'name', 'doc_type', 'expiry_date', 'file_url'],
-  'Document'
-);
+async function normaliseDocumentPayload(body) {
+  const tenantId = body.tenant_id || null;
+  let propertyId = body.property_id || null;
 
-adminCrud(
-  '/documents',
-  'documents',
-  ['property_id', 'tenant_id', 'name', 'doc_type', 'expiry_date', 'file_url'],
-  'Document'
-);
+  if (tenantId && !propertyId) {
+    const { rows } = await query('select property_id from tenants where id=$1', [tenantId]);
+    propertyId = rows[0]?.property_id || null;
+  }
+
+  return {
+    property_id: propertyId,
+    tenant_id: tenantId,
+    name: body.name ?? null,
+    doc_type: body.doc_type ?? null,
+    expiry_date: body.expiry_date || null,
+    file_url: body.file_url || null,
+  };
+}
+
+app.post('/documents', requireAuth, requireAdmin, async (req, res) => {
+  const payload = await normaliseDocumentPayload(req.body || {});
+  if (!payload.name) {
+    return res.status(400).json({ error: 'Document name is required' });
+  }
+
+  const { rows } = await query(
+    `insert into documents (property_id, tenant_id, name, doc_type, expiry_date, file_url)
+     values ($1,$2,$3,$4,$5,$6)
+     returning *`,
+    [payload.property_id, payload.tenant_id, payload.name, payload.doc_type, payload.expiry_date, payload.file_url]
+  );
+  res.status(201).json(rows[0]);
+});
+
+app.patch('/documents/:id', requireAuth, requireAdmin, async (req, res) => {
+  const payload = await normaliseDocumentPayload(req.body || {});
+  const fields = ['property_id', 'tenant_id', 'name', 'doc_type', 'expiry_date', 'file_url'];
+  const updates = fields.filter((field) => Object.prototype.hasOwnProperty.call(req.body, field));
+
+  if (payload.tenant_id && !req.body.property_id && !updates.includes('property_id')) {
+    updates.push('property_id');
+  }
+
+  if (!updates.length) {
+    return res.status(400).json({ error: 'No fields supplied to update' });
+  }
+
+  const values = updates.map((field) => payload[field]);
+  const setSql = updates.map((field, index) => `${field}=$${index + 2}`).join(', ');
+  const { rows } = await query(
+    `update documents set ${setSql} where id=$1 returning *`,
+    [req.params.id, ...values]
+  );
+  sendOneOr404(res, rows, 'Document');
+});
+
+app.delete('/documents/:id', requireAuth, requireAdmin, async (req, res) => {
+  const { rows } = await query('delete from documents where id=$1 returning *', [req.params.id]);
+  sendOneOr404(res, rows, 'Document');
+});
 
 app.post('/documents/upload', requireAuth, requireAdmin, upload.single('file'), (req, res) => {
   if (!req.file) {

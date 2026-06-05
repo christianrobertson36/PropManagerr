@@ -47,7 +47,7 @@ type PageConfig = {
   adminOnly?: boolean;
 };
 
-const APP_VERSION = 'v25';
+const APP_VERSION = 'v26';
 
 const emptyDashboard: DashboardData = {
   properties: [],
@@ -712,32 +712,77 @@ function Rent({ data, refresh, user }: { data: DashboardData; refresh: () => Pro
 function Maintenance({ data, refresh, user }: { data: DashboardData; refresh: () => Promise<void>; user: User }) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [propertyId, setPropertyId] = useState(data.properties[0]?.id || '');
+
+  const currentTenant = user.role === 'tenant'
+    ? data.tenants.find(tenant => tenant.id === user.tenant_id) || null
+    : null;
+  const tenantPropertyId = currentTenant?.property_id || currentTenant?.property?.id || '';
+  const tenantProperty = tenantPropertyId
+    ? data.properties.find(property => property.id === tenantPropertyId) || currentTenant?.property || null
+    : null;
+  const tenantFallbackProperty = user.role === 'tenant' ? tenantProperty || data.properties[0] || null : null;
+  const availableProperties = user.role === 'tenant'
+    ? tenantFallbackProperty ? [tenantFallbackProperty] : []
+    : data.properties;
+
+  const [propertyId, setPropertyId] = useState(availableProperties[0]?.id || '');
 
   useEffect(() => {
-    if (!propertyId && data.properties[0]?.id) setPropertyId(data.properties[0].id);
-  }, [data.properties, propertyId]);
+    const nextPropertyId = user.role === 'tenant'
+      ? tenantFallbackProperty?.id || tenantFallbackProperty?.property_id || ''
+      : data.properties[0]?.id || '';
+
+    if (!propertyId && nextPropertyId) {
+      setPropertyId(nextPropertyId);
+    }
+  }, [data.properties, propertyId, tenantFallbackProperty, user.role]);
+
+  const selectedProperty = availableProperties.find(property => property.id === propertyId) || tenantFallbackProperty;
+  const repairPropertyId = user.role === 'tenant'
+    ? selectedProperty?.id || tenantPropertyId || propertyId
+    : propertyId;
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    await api.createTicket({ title, description, property_id: propertyId, urgency: 'medium' });
+    if (!repairPropertyId) return;
+
+    await api.createTicket({ title, description, property_id: repairPropertyId, urgency: 'medium' });
     setTitle('');
     setDescription('');
     await refresh();
   }
 
   const visibleTickets = user.role === 'tenant'
-    ? data.maintenanceTickets.filter(ticket => ticket.tenant_id === user.tenant_id || ticket.property_id === data.tenants.find(tenant => tenant.id === user.tenant_id)?.property_id)
+    ? data.maintenanceTickets.filter(ticket => {
+        const ticketPropertyId = ticket.property_id || ticket.property?.id;
+        return ticket.tenant_id === user.tenant_id || Boolean(tenantPropertyId && ticketPropertyId === tenantPropertyId);
+      })
     : data.maintenanceTickets;
+
+  function ticketAddress(ticketPropertyId: string | null | undefined) {
+    if (!ticketPropertyId) return '-';
+    return data.properties.find(property => property.id === ticketPropertyId)?.address || ticketPropertyId;
+  }
 
   return (
     <div className="space-y-6">
       <Card title="Report a repair">
         <form onSubmit={submit} className="grid gap-4 md:grid-cols-2">
           <Input label="Title" value={title} onChange={setTitle} required />
-          <Select<string> label="Property" value={propertyId} onChange={value => setPropertyId(value)}>
-            {data.properties.map(property => <option key={property.id} value={property.id}>{property.address}</option>)}
-          </Select>
+
+          {user.role === 'tenant' ? (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+              <p className="font-medium text-slate-900">Repair address</p>
+              <p>{selectedProperty?.address || 'No property assigned yet'}</p>
+              {selectedProperty?.postcode && <p className="text-slate-500">{selectedProperty.postcode}</p>}
+            </div>
+          ) : (
+            <Select<string> label="Property" value={propertyId} onChange={value => setPropertyId(value)}>
+              <option value="">Choose property</option>
+              {availableProperties.map(property => <option key={property.id} value={property.id}>{property.address}</option>)}
+            </Select>
+          )}
+
           <label className="block text-sm font-medium text-slate-700 md:col-span-2">
             Description
             <textarea
@@ -748,7 +793,7 @@ function Maintenance({ data, refresh, user }: { data: DashboardData; refresh: ()
             />
           </label>
           <div className="md:col-span-2">
-            <Button type="submit" disabled={!propertyId}>Submit repair</Button>
+            <Button type="submit" disabled={!repairPropertyId}>Submit repair</Button>
           </div>
         </form>
       </Card>
@@ -757,7 +802,7 @@ function Maintenance({ data, refresh, user }: { data: DashboardData; refresh: ()
         columns={['Title', 'Property', 'Urgency', 'Status', 'Created']}
         rows={visibleTickets.map(ticket => [
           ticket.title,
-          ticket.property?.address || ticket.property_id,
+          ticket.property?.address || ticketAddress(ticket.property_id),
           ticket.urgency,
           ticket.status,
           dateOnly(ticket.created_at),
@@ -771,14 +816,57 @@ function Documents({ data, refresh, user }: { data: DashboardData; refresh: () =
   const [editing, setEditing] = useState<DocumentRecord | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [form, setForm] = useState<DocumentPayload>({ property_id: '', tenant_id: '', name: '', doc_type: 'other', expiry_date: null, file_url: '' });
+
+  const currentTenant = user.role === 'tenant'
+    ? data.tenants.find(tenant => tenant.id === user.tenant_id) || null
+    : null;
+  const currentTenantPropertyId = currentTenant?.property_id || currentTenant?.property?.id || '';
+
   const visibleDocuments = user.role === 'tenant'
-    ? data.documents.filter(document => document.tenant_id === user.tenant_id || document.property_id === data.tenants.find(tenant => tenant.id === user.tenant_id)?.property_id)
+    ? data.documents.filter(document => {
+        const documentPropertyId = document.property_id || document.property?.id;
+        return document.tenant_id === user.tenant_id || Boolean(currentTenantPropertyId && documentPropertyId === currentTenantPropertyId);
+      })
     : data.documents;
+
+  function propertyAddress(propertyId: string | null | undefined) {
+    if (!propertyId) return '-';
+    return data.properties.find(property => property.id === propertyId)?.address || propertyId;
+  }
+
+  function tenantName(tenantId: string | null | undefined) {
+    if (!tenantId) return '-';
+    return data.tenants.find(tenant => tenant.id === tenantId)?.name || tenantId;
+  }
+
+  function tenantPropertyId(tenantId: string | null | undefined) {
+    if (!tenantId) return '';
+    const tenant = data.tenants.find(row => row.id === tenantId);
+    return tenant?.property_id || tenant?.property?.id || '';
+  }
+
+  function setDocumentTenant(tenantId: string) {
+    const nextPropertyId = tenantPropertyId(tenantId);
+    setForm({
+      ...form,
+      tenant_id: tenantId || null,
+      property_id: nextPropertyId || form.property_id || null,
+    });
+  }
+
+  function setDocumentProperty(propertyId: string) {
+    const selectedTenantPropertyId = tenantPropertyId(form.tenant_id || '');
+    setForm({
+      ...form,
+      property_id: propertyId || null,
+      tenant_id: selectedTenantPropertyId && propertyId && selectedTenantPropertyId !== propertyId ? null : form.tenant_id,
+    });
+  }
 
   function startEdit(document: DocumentRecord) {
     setEditing(document);
     setForm({
-      property_id: document.property_id || '',
+      property_id: document.property_id || document.property?.id || '',
       tenant_id: document.tenant_id || '',
       name: document.name,
       doc_type: document.doc_type,
@@ -800,13 +888,16 @@ function Documents({ data, refresh, user }: { data: DashboardData; refresh: () =
       const uploaded = await api.uploadDocument(file);
       fileUrl = uploaded.file_url;
     }
+
+    const autoPropertyId = tenantPropertyId(form.tenant_id || '') || form.property_id || null;
     const payload = {
       ...form,
-      property_id: form.property_id || null,
+      property_id: autoPropertyId,
       tenant_id: form.tenant_id || null,
       expiry_date: form.expiry_date || null,
       file_url: fileUrl,
     };
+
     if (editing) await api.updateDocument(editing.id, payload);
     else await api.createDocument(payload);
     reset();
@@ -822,14 +913,17 @@ function Documents({ data, refresh, user }: { data: DashboardData; refresh: () =
     <div className="space-y-6">
       {user.role === 'admin' && (
         <CrudLayout title={editing ? 'Edit document' : 'Add document'} onSubmit={submit} onCancel={reset} editing={Boolean(editing)} hideTable>
-          <Select<string> label="Property" value={fieldValue(form.property_id)} onChange={value => setForm({ ...form, property_id: value || null })}>
+          <Select<string> label="Tenant (optional - auto-fills property)" value={fieldValue(form.tenant_id)} onChange={setDocumentTenant}>
+            <option value="">No tenant / property-wide document</option>
+            {data.tenants.map(tenant => <option key={tenant.id} value={tenant.id}>{tenant.name}</option>)}
+          </Select>
+          <Select<string> label="Property" value={fieldValue(form.property_id)} onChange={setDocumentProperty}>
             <option value="">No property</option>
             {data.properties.map(property => <option key={property.id} value={property.id}>{property.address}</option>)}
           </Select>
-          <Select<string> label="Tenant" value={fieldValue(form.tenant_id)} onChange={value => setForm({ ...form, tenant_id: value || null })}>
-            <option value="">No tenant</option>
-            {data.tenants.map(tenant => <option key={tenant.id} value={tenant.id}>{tenant.name}</option>)}
-          </Select>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+            Choose a tenant to link the document to that tenant and automatically use their assigned property. For property-wide documents, leave tenant blank and choose the property only.
+          </div>
           <Input label="Name" value={fieldValue(form.name)} onChange={value => setForm({ ...form, name: value })} required />
           <Select<DocType> label="Document type" value={(form.doc_type as DocType) || 'other'} onChange={value => setForm({ ...form, doc_type: value || 'other' })}>
             <option value="tenancy_agreement">Tenancy agreement</option>
@@ -854,8 +948,8 @@ function Documents({ data, refresh, user }: { data: DashboardData; refresh: () =
         rows={visibleDocuments.map(document => [
           document.name,
           document.doc_type,
-          document.property?.address || '-',
-          document.tenant?.name || '-',
+          document.property?.address || propertyAddress(document.property_id),
+          document.tenant?.name || tenantName(document.tenant_id),
           dateOnly(document.expiry_date) || '-',
           document.file_url ? <a key={`${document.id}-file`} className="font-medium text-emerald-700 hover:underline" href={api.documentFileUrl(document.file_url)} target="_blank" rel="noreferrer">View</a> : 'Not uploaded',
           user.role === 'admin' ? <Actions onEdit={() => startEdit(document)} onDelete={() => remove(document.id)} /> : '-',
