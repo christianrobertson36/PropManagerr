@@ -44,6 +44,18 @@ export type ExpensePayload = {
   amount?: number;
 };
 
+export type MaintenanceTicketPayload = {
+  property_id?: string | null;
+  tenant_id?: string | null;
+  title?: string;
+  description?: string;
+  urgency?: string;
+  status?: string;
+  contractor?: string | null;
+  cost?: number | null;
+  notes?: string | null;
+};
+
 export type DocumentPayload = {
   property_id?: string | null;
   tenant_id?: string | null;
@@ -137,6 +149,17 @@ export const api = {
     request<MaintenanceTicket>('/maintenance', {
       method: 'POST',
       body: JSON.stringify(ticket),
+    }),
+
+  updateMaintenanceTicket: (id: string, ticket: MaintenanceTicketPayload) =>
+    request<MaintenanceTicket>(`/maintenance-admin/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(ticket),
+    }),
+
+  deleteMaintenanceTicket: (id: string) =>
+    request<MaintenanceTicket>(`/maintenance-admin/${id}`, {
+      method: 'DELETE',
     }),
 
   listAdminAccounts: () => request<AdminAccount[]>('/admin/accounts'),

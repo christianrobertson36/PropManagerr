@@ -36,6 +36,9 @@ import type {
   Property,
   PropertyStatus,
   RentPayment,
+  MaintenanceTicket,
+  TicketStatus,
+  Urgency,
   Tenant,
   User,
 } from './types';
@@ -712,6 +715,18 @@ function Rent({ data, refresh, user }: { data: DashboardData; refresh: () => Pro
 function Maintenance({ data, refresh, user }: { data: DashboardData; refresh: () => Promise<void>; user: User }) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [editing, setEditing] = useState<MaintenanceTicket | null>(null);
+  const [adminForm, setAdminForm] = useState({
+    property_id: '',
+    tenant_id: '',
+    title: '',
+    description: '',
+    urgency: 'medium' as Urgency,
+    status: 'open' as TicketStatus,
+    contractor: '',
+    cost: '',
+    notes: '',
+  });
 
   const currentTenant = user.role === 'tenant'
     ? data.tenants.find(tenant => tenant.id === user.tenant_id) || null
@@ -764,8 +779,112 @@ function Maintenance({ data, refresh, user }: { data: DashboardData; refresh: ()
     return data.properties.find(property => property.id === ticketPropertyId)?.address || ticketPropertyId;
   }
 
+  function startEdit(ticket: MaintenanceTicket) {
+    setEditing(ticket);
+    setAdminForm({
+      property_id: ticket.property_id || ticket.property?.id || '',
+      tenant_id: ticket.tenant_id || '',
+      title: ticket.title || '',
+      description: ticket.description || '',
+      urgency: ticket.urgency || 'medium',
+      status: ticket.status || 'open',
+      contractor: (ticket as MaintenanceTicket & { contractor?: string | null }).contractor || '',
+      cost: fieldValue((ticket as MaintenanceTicket & { cost?: number | string | null }).cost),
+      notes: (ticket as MaintenanceTicket & { notes?: string | null }).notes || '',
+    });
+  }
+
+  function resetEdit() {
+    setEditing(null);
+    setAdminForm({
+      property_id: '',
+      tenant_id: '',
+      title: '',
+      description: '',
+      urgency: 'medium',
+      status: 'open',
+      contractor: '',
+      cost: '',
+      notes: '',
+    });
+  }
+
+  async function saveTicket(event: FormEvent) {
+    event.preventDefault();
+    if (!editing) return;
+
+    await api.updateMaintenanceTicket(editing.id, {
+      property_id: adminForm.property_id || null,
+      tenant_id: adminForm.tenant_id || null,
+      title: adminForm.title,
+      description: adminForm.description,
+      urgency: adminForm.urgency,
+      status: adminForm.status,
+      contractor: adminForm.contractor || null,
+      cost: adminForm.cost ? Number(adminForm.cost) : null,
+      notes: adminForm.notes || null,
+    });
+    resetEdit();
+    await refresh();
+  }
+
+  async function deleteTicket(id: string) {
+    if (!confirm('Delete this repair ticket?')) return;
+    await api.deleteMaintenanceTicket(id);
+    await refresh();
+  }
+
   return (
     <div className="space-y-6">
+      {user.role === 'admin' && editing && (
+        <Card title="Update repair ticket">
+          <form onSubmit={saveTicket} className="grid gap-4 md:grid-cols-3">
+            <Select<string> label="Property" value={adminForm.property_id} onChange={value => setAdminForm({ ...adminForm, property_id: value })}>
+              <option value="">Choose property</option>
+              {data.properties.map(property => <option key={property.id} value={property.id}>{property.address}</option>)}
+            </Select>
+            <Select<string> label="Tenant" value={adminForm.tenant_id} onChange={value => setAdminForm({ ...adminForm, tenant_id: value || '' })}>
+              <option value="">No tenant</option>
+              {data.tenants.map(tenant => <option key={tenant.id} value={tenant.id}>{tenant.name}</option>)}
+            </Select>
+            <Select<Urgency> label="Urgency" value={adminForm.urgency} onChange={value => setAdminForm({ ...adminForm, urgency: value || 'medium' })}>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+            </Select>
+            <Input label="Title" value={adminForm.title} onChange={value => setAdminForm({ ...adminForm, title: value })} required />
+            <Select<TicketStatus> label="Status" value={adminForm.status} onChange={value => setAdminForm({ ...adminForm, status: value || 'open' })}>
+              <option value="open">Open</option>
+              <option value="in_progress">In progress</option>
+              <option value="resolved">Resolved</option>
+            </Select>
+            <Input label="Contractor" value={adminForm.contractor} onChange={value => setAdminForm({ ...adminForm, contractor: value })} />
+            <Input label="Cost" type="number" value={adminForm.cost} onChange={value => setAdminForm({ ...adminForm, cost: value })} />
+            <label className="block text-sm font-medium text-slate-700 md:col-span-2">
+              Description
+              <textarea
+                className="mt-1 min-h-24 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                value={adminForm.description}
+                onChange={event => setAdminForm({ ...adminForm, description: event.target.value })}
+                required
+              />
+            </label>
+            <label className="block text-sm font-medium text-slate-700 md:col-span-3">
+              Notes
+              <textarea
+                className="mt-1 min-h-20 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                value={adminForm.notes}
+                onChange={event => setAdminForm({ ...adminForm, notes: event.target.value })}
+              />
+            </label>
+            <div className="flex items-end gap-2 md:col-span-3">
+              <Button type="submit">Save repair</Button>
+              <Button variant="secondary" onClick={resetEdit}>Cancel</Button>
+            </div>
+          </form>
+        </Card>
+      )}
+
       <Card title="Report a repair">
         <form onSubmit={submit} className="grid gap-4 md:grid-cols-2">
           <Input label="Title" value={title} onChange={setTitle} required />
@@ -799,14 +918,30 @@ function Maintenance({ data, refresh, user }: { data: DashboardData; refresh: ()
       </Card>
 
       <Table
-        columns={['Title', 'Property', 'Urgency', 'Status', 'Created']}
-        rows={visibleTickets.map(ticket => [
-          ticket.title,
-          ticket.property?.address || ticketAddress(ticket.property_id),
-          ticket.urgency,
-          ticket.status,
-          dateOnly(ticket.created_at),
-        ])}
+        columns={user.role === 'admin'
+          ? ['Title', 'Property', 'Tenant', 'Urgency', 'Status', 'Created', 'Actions']
+          : ['Title', 'Property', 'Urgency', 'Status', 'Created']}
+        rows={visibleTickets.map(ticket => {
+          const baseRow: ReactNode[] = [
+            ticket.title,
+            ticket.property?.address || ticketAddress(ticket.property_id),
+            ticket.urgency,
+            ticket.status,
+            dateOnly(ticket.created_at),
+          ];
+
+          if (user.role !== 'admin') return baseRow;
+
+          return [
+            ticket.title,
+            ticket.property?.address || ticketAddress(ticket.property_id),
+            ticket.tenant?.name || '-',
+            ticket.urgency,
+            ticket.status,
+            dateOnly(ticket.created_at),
+            <Actions onEdit={() => startEdit(ticket)} onDelete={() => deleteTicket(ticket.id)} />,
+          ];
+        })}
       />
     </div>
   );
