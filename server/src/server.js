@@ -1,6 +1,7 @@
 import { initDatabase } from './initDb.js';
 import 'dotenv/config';
 import fs from 'fs/promises';
+import fsSync from 'fs';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -15,11 +16,15 @@ app.use(helmet());
 app.use(cors({ origin: process.env.CORS_ORIGIN || true }));
 app.use(express.json({ limit: '10mb' }));
 app.use(morgan('combined'));
-app.use('/uploads', express.static('/app/uploads'));
+
+const uploadsRoot = process.env.UPLOADS_DIR || '/app/uploads';
+const documentUploadDir = `${uploadsRoot}/documents`;
+fsSync.mkdirSync(documentUploadDir, { recursive: true });
+app.use('/uploads', express.static(uploadsRoot));
 
 const uploadStorage = multer.diskStorage({
   destination: (_req, _file, cb) => {
-    cb(null, '/app/uploads/documents');
+    cb(null, documentUploadDir);
   },
   filename: (_req, file, cb) => {
     const originalName = file.originalname || 'document';
@@ -442,14 +447,24 @@ app.delete('/documents/:id', requireAuth, requireAdmin, async (req, res) => {
   if (deleted.file_url && deleted.file_url.startsWith('/uploads/documents/')) {
     const filename = deleted.file_url.replace('/uploads/documents/', '');
     if (filename && !filename.includes('/') && !filename.includes('..')) {
-      await fs.unlink(`/app/uploads/documents/${filename}`).catch(() => undefined);
+      await fs.unlink(`${documentUploadDir}/${filename}`).catch(() => undefined);
     }
   }
 
   return res.json(deleted);
 });
 
-app.post('/documents/upload', requireAuth, requireAdmin, upload.single('file'), (req, res) => {
+function uploadDocumentFile(req, res, next) {
+  upload.single('file')(req, res, (err) => {
+    if (err) {
+      console.error('Document upload failed', err);
+      return res.status(500).json({ error: 'Document upload failed. Check the uploads volume and folder permissions.' });
+    }
+    next();
+  });
+}
+
+app.post('/documents/upload', requireAuth, requireAdmin, uploadDocumentFile, (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
   }
