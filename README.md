@@ -4,20 +4,24 @@
 
 PropManagerr is a web-based property management platform designed for UK landlords who want control of their own data. It runs on your own server, NAS or hosting environment and includes an admin dashboard plus a tenant portal.
 
+PropManagerr also includes a Windows desktop app that connects to your existing PropManagerr server.
+
 ---
 
 ## Why PropManagerr?
 
-Many landlord tools are cloud-only, expensive, or not designed around small private landlords. PropManagerr is being built as a practical self-hosted alternative for landlords who want:
+Many landlord tools are cloud-only, expensive, or not designed around small private landlords.
 
-* Property and tenant management
-* Rent tracking
-* Repair reporting
-* Document storage
-* Compliance awareness
-* Expense tracking
-* Tenant access
-* Full control over hosting and data
+PropManagerr is being built as a practical self-hosted alternative for landlords who want:
+
+- Property and tenant management
+- Rent tracking
+- Repair reporting
+- Document storage
+- Compliance awareness
+- Expense tracking
+- Tenant access
+- Full control over hosting and data
 
 ---
 
@@ -25,75 +29,75 @@ Many landlord tools are cloud-only, expensive, or not designed around small priv
 
 ### Admin Dashboard
 
-* Portfolio overview
-* Property status summary
-* Rent collection overview
-* Overdue rent visibility
-* Compliance document reminders
-* Recent repair tickets
-* UK legal/compliance update section
+- Portfolio overview
+- Property status summary
+- Rent collection overview
+- Overdue rent visibility
+- Compliance document reminders
+- Recent repair tickets
+- UK legal/compliance update section
 
 ### Property Management
 
-* Add, edit and delete properties
-* Track address, city, postcode, rent, bedrooms, property type and status
-* Assign tenants to properties
+- Add, edit and delete properties
+- Track address, city, postcode, rent, bedrooms, property type and status
+- Assign tenants to properties
 
 ### Tenant Management
 
-* Add, edit and delete tenants
-* Assign tenants to properties
-* Track lease start/end dates
-* Track payment status
-* Manage tenant login accounts
+- Add, edit and delete tenants
+- Assign tenants to properties
+- Track lease start and end dates
+- Track payment status
+- Manage tenant login accounts
 
 ### Rent Management
 
-* View rent payments
-* Edit payment status
-* Track paid, pending and overdue rent
-* Tenant portal rent view
+- View rent payments
+- Edit payment status
+- Track paid, pending and overdue rent
+- Tenant portal rent view
 
 ### Documents & Compliance
 
-* Upload property documents
-* Upload tenant documents
-* Upload global documents for all tenants
-* View and delete documents
-* Tenant access to assigned/global documents
-* Track expiry dates for compliance documents
+- Upload property documents
+- Upload tenant documents
+- Upload global documents for all tenants
+- View and delete documents
+- Tenant access to assigned and global documents
+- Track expiry dates for compliance documents
 
 ### Repairs & Maintenance
 
-* Tenant repair reporting
-* Admin repair management
-* Track repair status
-* Set urgency
-* Add contractor, cost and notes
-* Tenant repair history
+- Tenant repair reporting
+- Admin repair management
+- Track repair status
+- Set urgency
+- Add contractor, cost and notes
+- Tenant repair history
 
 ### Expenses
 
-* Expense tracking
-* Expense categories
-* Property-linked expenses
-* Dashboard integration
+- Expense tracking
+- Expense categories
+- Property-linked expenses
+- Dashboard integration
 
 ### Tenant Portal
 
 Tenants can log in and view:
 
-* My property
-* My tenancy
-* My rent
-* My documents
-* My repairs
+- My property
+- My tenancy
+- My rent
+- My documents
+- My repairs
 
 ### Windows Desktop App
 
-PropManagerr also has an Electron-based Windows desktop app that connects to the existing PropManagerr server.
+PropManagerr has an Electron-based Windows desktop app.
 
-The desktop app does not replace the server. It loads the existing hosted PropManagerr web/API app and provides a Windows installer experience.
+The desktop app does not replace the server. It connects to your existing PropManagerr web/API server and loads the hosted app inside a Windows desktop client.
 
 ---
 
@@ -114,99 +118,33 @@ Recommended screenshots to add:
 
 ## Tech Stack
 
-* React
-* TypeScript
-* Tailwind CSS
-* Node.js
-* Express
-* PostgreSQL
-* Docker
-* TrueNAS SCALE custom app deployment
-* Electron for Windows desktop client
+- React
+- TypeScript
+- Tailwind CSS
+- Node.js
+- Express
+- PostgreSQL
+- Docker
+- TrueNAS SCALE custom app deployment
+- Electron for Windows desktop client
 
 ---
 
-## Deployment
+## Installation
 
-PropManagerr is designed to be self-hosted.
+PropManagerr is designed to be self-hosted using Docker, Docker Compose or a TrueNAS SCALE custom app.
 
-Current deployment target:
+### Requirements
 
-* Docker / Docker Compose
-* TrueNAS SCALE custom app
-* PostgreSQL database
-* Persistent uploads volume
+- Docker / Docker Compose, or TrueNAS SCALE
+- PostgreSQL database
+- Persistent storage for uploaded documents
+- A reverse proxy such as Nginx Proxy Manager is optional but recommended for HTTPS
 
-Example:
+### Quick Start
+
+Clone the repository:
 
 ```bash
-docker compose up -d
-```
-
----
-
-## Windows Desktop App
-
-The Windows app is built with Electron and connects to your existing PropManagerr server URL.
-
-Build locally:
-
-```bash
-npm install
-npm run electron:build
-```
-
-The installer is generated in:
-
-```text
-release/
-```
-
----
-
-## Project Status
-
-PropManagerr is actively under development.
-
-Current stable areas include:
-
-* Admin login
-* Tenant login
-* Dashboard
-* Properties
-* Tenants
-* Rent payments
-* Documents
-* Tenant portal
-* Repairs/maintenance
-* Expenses
-* Windows desktop wrapper
-
----
-
-## Roadmap
-
-Planned improvements:
-
-* PDF preview
-* Audit logging
-* Advanced reporting
-* Google Drive / external backup options
-* More compliance automation
-* Better mobile optimisation
-* More installer/release polish
-* Public demo screenshots
-
----
-
-## Licence
-
-This project is licensed under the MIT Licence.
-
-© 2026 Christian Robertson
-
----
-
-## Disclaimer
-
-PropManagerr is intended as property management software and does not provide legal advice. Compliance/legal update features are for awareness only. Landlords should always check official UK government guidance or seek professional advice where required.
+git clone https://github.com/christianrobertson36/PropManagerr.git
+cd PropManagerr
