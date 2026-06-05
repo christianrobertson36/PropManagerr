@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PropManagerr Server Settings</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+        background: #0f172a;
+        color: #0f172a;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .card {
+        width: min(560px, calc(100vw - 32px));
+        background: #fff;
+        border-radius: 18px;
+        padding: 32px;
+        box-shadow: 0 20px 50px rgba(0,0,0,0.35);
+      }
+      .brand {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        margin-bottom: 18px;
+      }
+      .logo {
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        background: #059669;
+        display: grid;
+        place-items: center;
+        color: white;
+        font-weight: 800;
+      }
+      h1 {
+        margin: 0;
+        font-size: 24px;
+      }
+      p {
+        color: #475569;
+        line-height: 1.5;
+      }
+      label {
+        display: block;
+        margin-top: 20px;
+        font-weight: 700;
+        color: #334155;
+      }
+      input {
+        box-sizing: border-box;
+        width: 100%;
+        margin-top: 8px;
+        padding: 12px 14px;
+        border: 1px solid #cbd5e1;
+        border-radius: 10px;
+        font-size: 15px;
+      }
+      .hint {
+        margin-top: 8px;
+        font-size: 13px;
+        color: #64748b;
+      }
+      .error {
+        display: none;
+        margin-top: 16px;
+        padding: 12px;
+        border-radius: 10px;
+        background: #fff1f2;
+        color: #be123c;
+        border: 1px solid #fecdd3;
+      }
+      .actions {
+        display: flex;
+        gap: 12px;
+        margin-top: 24px;
+      }
+      button {
+        border: 0;
+        border-radius: 10px;
+        padding: 12px 16px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .primary {
+        background: #059669;
+        color: #fff;
+      }
+      .secondary {
+        background: #e2e8f0;
+        color: #334155;
+      }
+      code {
+        background: #f1f5f9;
+        border-radius: 6px;
+        padding: 2px 5px;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <div class="brand">
+        <div class="logo">PM</div>
+        <div>
+          <h1>PropManagerr Desktop</h1>
+          <p style="margin: 4px 0 0;">Connect this Windows app to your PropManagerr server.</p>
+        </div>
+      </div>
+
+      <p>
+        Enter the address where your working PropManagerr web app is hosted.
+        For your current server this may be a LAN address like <code>http://192.168.1.177</code>,
+        or later a domain like <code>https://app.yourdomain.co.uk</code>.
+      </p>
+
+      <form id="settingsForm">
+        <label for="serverUrl">Server URL</label>
+        <input id="serverUrl" name="serverUrl" placeholder="https://app.yourdomain.co.uk" autocomplete="off" />
+        <div class="hint">
+          Include <code>http://</code> or <code>https://</code>. Do not add <code>/api</code>; use the main app URL.
+        </div>
+
+        <div id="errorBox" class="error"></div>
+
+        <div class="actions">
+          <button type="submit" class="primary">Save and open app</button>
+          <button type="button" id="openButton" class="secondary">Open app</button>
+        </div>
+      </form>
+    </main>
+
+    <script>
+      const form = document.getElementById('settingsForm');
+      const input = document.getElementById('serverUrl');
+      const errorBox = document.getElementById('errorBox');
+      const openButton = document.getElementById('openButton');
+
+      function showError(message) {
+        errorBox.textContent = message;
+        errorBox.style.display = 'block';
+      }
+
+      function clearError() {
+        errorBox.textContent = '';
+        errorBox.style.display = 'none';
+      }
+
+      async function load() {
+        const params = new URLSearchParams(window.location.search);
+        const error = params.get('error');
+        if (error) showError(error);
+
+        const config = await window.propmanagerr.getConfig();
+        input.value = config.serverUrl || '';
+      }
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        clearError();
+
+        try {
+          await window.propmanagerr.saveConfig({ serverUrl: input.value });
+        } catch (error) {
+          showError(error.message || 'Could not save settings.');
+        }
+      });
+
+      openButton.addEventListener('click', async () => {
+        clearError();
+        try {
+          await window.propmanagerr.saveConfig({ serverUrl: input.value });
+        } catch (error) {
+          showError(error.message || 'Could not open app.');
+        }
+      });
+
+      load().catch(error => showError(error.message || 'Could not load settings.'));
+    </script>
+  </body>
+</html>
