@@ -77,26 +77,30 @@ export type AdminAccountPayload = {
   active?: boolean;
 };
 
+export type ComplianceUpdate = {
+  id: string;
+  title: string;
+  summary: string;
+  source: string;
+  url: string;
+  effective_date: string | null;
+  last_checked: string;
+  severity: 'info' | 'important' | 'required';
+};
+
 function documentFileUrl(fileUrl: string | null | undefined): string {
   if (!fileUrl) return '#';
-
   if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
     return fileUrl;
   }
-
   if (fileUrl.startsWith('/')) {
     return `${API_URL}${fileUrl}`;
   }
-
   return `${API_URL}/${fileUrl}`;
 }
 
-async function request<T = any>(
-  path: string,
-  options: RequestInit = {}
-): Promise<T> {
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = localStorage.getItem('pm_token');
-
   const res = await fetch(`${API_URL}${path}`, {
     ...options,
     headers: {
@@ -107,9 +111,7 @@ async function request<T = any>(
   });
 
   if (!res.ok) {
-    const error = await res.json().catch(() => ({
-      error: 'Request failed',
-    }));
+    const error = await res.json().catch(() => ({ error: 'Request failed' }));
     throw new Error(error.error || 'Request failed');
   }
 
@@ -126,16 +128,13 @@ export const api = {
     }),
 
   me: () => request<{ user: User }>('/auth/me'),
-
   dashboard: () => request<DashboardData>('/dashboard'),
+  complianceUpdates: () => request<ComplianceUpdate[]>('/compliance/updates'),
 
   createTicket: (
-    ticket: Pick<
-      MaintenanceTicket,
-      'title' | 'description' | 'property_id' | 'urgency'
-    >
+    ticket: Pick<MaintenanceTicket, 'title' | 'description' | 'property_id' | 'urgency'>
   ) =>
-    request('/maintenance', {
+    request<MaintenanceTicket>('/maintenance', {
       method: 'POST',
       body: JSON.stringify(ticket),
     }),
@@ -247,9 +246,7 @@ export const api = {
     });
 
     if (!res.ok) {
-      const error = await res.json().catch(() => ({
-        error: 'Upload failed',
-      }));
+      const error = await res.json().catch(() => ({ error: 'Upload failed' }));
       throw new Error(error.error || 'Upload failed');
     }
 

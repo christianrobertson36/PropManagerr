@@ -9,6 +9,7 @@ import { comparePassword, hashPassword, requireAdmin, requireAuth, signUser } fr
 import multer from 'multer';
 
 const app = express();
+
 app.use(helmet());
 app.use(cors({ origin: process.env.CORS_ORIGIN || true }));
 app.use(express.json({ limit: '10mb' }));
@@ -34,20 +35,32 @@ const uploadStorage = multer.diskStorage({
   },
 });
 
-const upload = multer({
-  storage: uploadStorage,
-});
+const upload = multer({ storage: uploadStorage });
 
-const tenantFilter = (user, alias = '') => user.role === 'admin' ? { sql: '', params: [] } : { sql: ` where ${alias}tenant_id = $1`, params: [user.tenant_id] };
+const tenantFilter = (user, alias = '') =>
+  user.role === 'admin'
+    ? { sql: '', params: [] }
+    : { sql: ` where ${alias}tenant_id = $1`, params: [user.tenant_id] };
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
 app.post('/auth/login', async (req, res) => {
   const { email, password } = req.body || {};
-  if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
-  const { rows } = await query('select id, name, email, role, tenant_id, password_hash from app_users where lower(email)=lower($1) and active=true', [email]);
+
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password required' });
+  }
+
+  const { rows } = await query(
+    'select id, name, email, role, tenant_id, password_hash from app_users where lower(email)=lower($1) and active=true',
+    [email]
+  );
+
   const user = rows[0];
-  if (!user || !(await comparePassword(password, user.password_hash))) return res.status(401).json({ error: 'Invalid login' });
+  if (!user || !(await comparePassword(password, user.password_hash))) {
+    return res.status(401).json({ error: 'Invalid login' });
+  }
+
   delete user.password_hash;
   res.json({ token: signUser(user), user });
 });
@@ -56,18 +69,11 @@ app.get('/auth/me', requireAuth, (req, res) => res.json({ user: req.user }));
 
 app.get('/admin/accounts', requireAuth, requireAdmin, async (_req, res) => {
   const { rows } = await query(
-    `select u.id,
-            u.name,
-            u.email,
-            u.role,
-            u.tenant_id,
-            u.active,
-            row_to_json(t.*) as tenant
-       from app_users u
-       left join tenants t on t.id = u.tenant_id
-      order by u.role, u.name`
+    `select u.id, u.name, u.email, u.role, u.tenant_id, u.active, row_to_json(t.*) as tenant
+     from app_users u
+     left join tenants t on t.id = u.tenant_id
+     order by u.role, u.name`
   );
-
   res.json(rows);
 });
 
@@ -103,7 +109,6 @@ app.post('/admin/accounts', requireAuth, requireAdmin, async (req, res) => {
        returning id, name, email, role, tenant_id, active`,
       [name, email, passwordHash, role, accountTenantId, active]
     );
-
     res.status(201).json(rows[0]);
   } catch (err) {
     if (err?.code === '23505') {
@@ -149,7 +154,6 @@ app.patch('/admin/accounts/:id', requireAuth, requireAdmin, async (req, res) => 
       `update app_users set ${updates.join(', ')} where id=$1 returning id, name, email, role, tenant_id, active`,
       values
     );
-
     sendOneOr404(res, rows, 'Account');
   } catch (err) {
     if (err?.code === '23505') {
@@ -159,35 +163,146 @@ app.patch('/admin/accounts/:id', requireAuth, requireAdmin, async (req, res) => 
   }
 });
 
-
 app.get('/dashboard', requireAuth, async (req, res) => {
   const params = req.user.role === 'admin' ? [] : [req.user.tenant_id];
   const propertyWhere = req.user.role === 'admin' ? '' : ' where id in (select property_id from tenants where id=$1)';
   const tenantWhere = tenantFilter(req.user);
   const rentWhere = tenantFilter(req.user);
-  const maintWhere = req.user.role === 'admin' ? '' : ' where tenant_id=$1 or property_id in (select property_id from tenants where id=$1)';
-  const docWhere = req.user.role === 'admin' ? '' : ' where tenant_id=$1 or property_id in (select property_id from tenants where id=$1)';
+  const maintWhere =
+    req.user.role === 'admin'
+      ? ''
+      : ' where tenant_id=$1 or property_id in (select property_id from tenants where id=$1)';
+  const docWhere =
+    req.user.role === 'admin'
+      ? ''
+      : ' where tenant_id=$1 or property_id in (select property_id from tenants where id=$1)';
   const expenseWhere = req.user.role === 'admin' ? '' : ' where false';
+
   const [properties, tenants, rentPayments, maintenanceTickets, documents, expenses] = await Promise.all([
     query(`select * from properties${propertyWhere} order by address`, params),
-    query(`select t.*, row_to_json(p.*) as property from tenants t left join properties p on p.id=t.property_id${tenantWhere.sql} order by t.name`, tenantWhere.params),
-    query(`select r.*, row_to_json(t.*) as tenant, row_to_json(p.*) as property from rent_payments r left join tenants t on t.id=r.tenant_id left join properties p on p.id=r.property_id${rentWhere.sql} order by due_date desc`, rentWhere.params),
-    query(`select m.*, row_to_json(p.*) as property, row_to_json(t.*) as tenant from maintenance_tickets m left join properties p on p.id=m.property_id left join tenants t on t.id=m.tenant_id${maintWhere} order by m.created_at desc`, params),
-    query(`select d.*, row_to_json(p.*) as property, row_to_json(t.*) as tenant from documents d left join properties p on p.id=d.property_id left join tenants t on t.id=d.tenant_id${docWhere} order by d.expiry_date nulls last`, params),
-    query(`select e.*, row_to_json(p.*) as property from expenses e left join properties p on p.id=e.property_id${expenseWhere} order by date desc`, params),
+    query(
+      `select t.*, row_to_json(p.*) as property
+       from tenants t
+       left join properties p on p.id=t.property_id${tenantWhere.sql}
+       order by t.name`,
+      tenantWhere.params
+    ),
+    query(
+      `select r.*, row_to_json(t.*) as tenant, row_to_json(p.*) as property
+       from rent_payments r
+       left join tenants t on t.id=r.tenant_id
+       left join properties p on p.id=r.property_id${rentWhere.sql}
+       order by due_date desc`,
+      rentWhere.params
+    ),
+    query(
+      `select m.*, row_to_json(p.*) as property, row_to_json(t.*) as tenant
+       from maintenance_tickets m
+       left join properties p on p.id=m.property_id
+       left join tenants t on t.id=m.tenant_id${maintWhere}
+       order by m.created_at desc`,
+      params
+    ),
+    query(
+      `select d.*, row_to_json(p.*) as property, row_to_json(t.*) as tenant
+       from documents d
+       left join properties p on p.id=d.property_id
+       left join tenants t on t.id=d.tenant_id${docWhere}
+       order by d.expiry_date nulls last`,
+      params
+    ),
+    query(
+      `select e.*, row_to_json(p.*) as property
+       from expenses e
+       left join properties p on p.id=e.property_id${expenseWhere}
+       order by date desc`,
+      params
+    ),
   ]);
-  res.json({ properties: properties.rows, tenants: tenants.rows, rentPayments: rentPayments.rows, maintenanceTickets: maintenanceTickets.rows, documents: documents.rows, expenses: expenses.rows });
+
+  res.json({
+    properties: properties.rows,
+    tenants: tenants.rows,
+    rentPayments: rentPayments.rows,
+    maintenanceTickets: maintenanceTickets.rows,
+    documents: documents.rows,
+    expenses: expenses.rows,
+  });
+});
+
+app.get('/compliance/updates', requireAuth, (_req, res) => {
+  res.json([
+    {
+      id: 'renters-rights-act-roadmap',
+      title: "Renters' Rights Act 2025 implementation roadmap",
+      summary:
+        'Official GOV.UK roadmap for private rented sector reforms. Review the roadmap before making tenancy or process changes.',
+      source: 'GOV.UK',
+      url: 'https://www.gov.uk/government/publications/renters-rights-act-2025-implementation-roadmap/implementing-the-renters-rights-act-2025-our-roadmap-for-reforming-the-private-rented-sector',
+      effective_date: '2026-05-01',
+      last_checked: '2026-06-05',
+      severity: 'important',
+    },
+    {
+      id: 'right-to-rent-checks',
+      title: 'Right to rent checks',
+      summary:
+        'Official GOV.UK service for landlords and agents to check a tenant right to rent using a share code.',
+      source: 'GOV.UK',
+      url: 'https://www.gov.uk/view-right-to-rent',
+      effective_date: null,
+      last_checked: '2026-06-05',
+      severity: 'required',
+    },
+    {
+      id: 'landlord-safety-responsibilities',
+      title: 'Landlord safety responsibilities',
+      summary:
+        'Official GOV.UK guidance covering key landlord safety responsibilities including gas safety and property safety duties.',
+      source: 'GOV.UK',
+      url: 'https://www.gov.uk/private-renting/your-landlords-safety-responsibilities',
+      effective_date: null,
+      last_checked: '2026-06-05',
+      severity: 'required',
+    },
+    {
+      id: 'smoke-carbon-monoxide-alarms',
+      title: 'Smoke and carbon monoxide alarm requirements',
+      summary:
+        'Official GOV.UK guidance on smoke and carbon monoxide alarm requirements for landlords.',
+      source: 'GOV.UK',
+      url: 'https://www.gov.uk/government/publications/smoke-and-carbon-monoxide-alarms-explanatory-booklet-for-landlords',
+      effective_date: null,
+      last_checked: '2026-06-05',
+      severity: 'required',
+    },
+  ]);
 });
 
 app.post('/maintenance', requireAuth, async (req, res) => {
   const { title, description, property_id, urgency = 'medium' } = req.body || {};
-  if (!title || !description || !property_id) return res.status(400).json({ error: 'Title, description and property are required' });
-  if (req.user.role !== 'admin') {
-    const allowed = await query('select 1 from tenants where id=$1 and property_id=$2', [req.user.tenant_id, property_id]);
-    if (!allowed.rows[0]) return res.status(403).json({ error: 'Cannot create ticket for another property' });
+
+  if (!title || !description || !property_id) {
+    return res.status(400).json({ error: 'Title, description and property are required' });
   }
+
+  if (req.user.role !== 'admin') {
+    const allowed = await query('select 1 from tenants where id=$1 and property_id=$2', [
+      req.user.tenant_id,
+      property_id,
+    ]);
+
+    if (!allowed.rows[0]) {
+      return res.status(403).json({ error: 'Cannot create ticket for another property' });
+    }
+  }
+
   const tenantId = req.user.role === 'tenant' ? req.user.tenant_id : req.body.tenant_id || null;
-  const { rows } = await query('insert into maintenance_tickets(title, description, property_id, tenant_id, urgency, status) values ($1,$2,$3,$4,$5,$6) returning *', [title, description, property_id, tenantId, urgency, 'open']);
+  const { rows } = await query(
+    'insert into maintenance_tickets(title, description, property_id, tenant_id, urgency, status) values ($1,$2,$3,$4,$5,$6) returning *',
+    [title, description, property_id, tenantId, urgency, 'open']
+  );
+
   res.status(201).json(rows[0]);
 });
 
@@ -201,19 +316,15 @@ const adminCrud = (path, table, fields, name) => {
     const values = fields.map((field) => req.body[field] ?? null);
     const columns = fields.join(', ');
     const params = fields.map((_, index) => `$${index + 1}`).join(', ');
-
     const { rows } = await query(
       `insert into ${table} (${columns}) values (${params}) returning *`,
       values
     );
-
     res.status(201).json(rows[0]);
   });
 
   app.patch(`${path}/:id`, requireAuth, requireAdmin, async (req, res) => {
-    const updates = fields.filter((field) =>
-      Object.prototype.hasOwnProperty.call(req.body, field)
-    );
+    const updates = fields.filter((field) => Object.prototype.hasOwnProperty.call(req.body, field));
 
     if (!updates.length) {
       return res.status(400).json({ error: 'No fields supplied to update' });
@@ -221,7 +332,6 @@ const adminCrud = (path, table, fields, name) => {
 
     const setSql = updates.map((field, index) => `${field}=$${index + 2}`).join(', ');
     const values = updates.map((field) => req.body[field]);
-
     const { rows } = await query(
       `update ${table} set ${setSql} where id=$1 returning *`,
       [req.params.id, ...values]
@@ -231,106 +341,71 @@ const adminCrud = (path, table, fields, name) => {
   });
 
   app.delete(`${path}/:id`, requireAuth, requireAdmin, async (req, res) => {
-    const { rows } = await query(
-      `delete from ${table} where id=$1 returning *`,
-      [req.params.id]
-    );
-
+    const { rows } = await query(`delete from ${table} where id=$1 returning *`, [req.params.id]);
     sendOneOr404(res, rows, name);
   });
 };
 
-adminCrud('/properties', 'properties', [
-  'address',
-  'city',
-  'postcode',
-  'status',
-  'monthly_rent',
-  'bedrooms',
-  'property_type'
-], 'Property');
-
-adminCrud('/tenants', 'tenants', [
-  'property_id',
-  'name',
-  'email',
-  'phone',
-  'lease_start',
-  'lease_end',
-  'payment_status'
-], 'Tenant');
-
-adminCrud('/rent-payments', 'rent_payments', [
-  'tenant_id',
-  'property_id',
-  'due_date',
-  'amount',
-  'status',
-  'paid_date',
-  'payment_method',
-  'notes'
-], 'Rent payment');
-
-adminCrud('/maintenance-admin', 'maintenance_tickets', [
-  'property_id',
-  'tenant_id',
-  'title',
-  'description',
-  'urgency',
-  'status',
-  'contractor',
-  'cost',
-  'notes'
-], 'Maintenance ticket');
-
-adminCrud('/documents', 'documents', [
-  'property_id',
-  'tenant_id',
-  'name',
-  'doc_type',
-  'expiry_date',
-  'file_url'
-], 'Document');
-
-adminCrud('/documents', 'documents', [
-  'property_id',
-  'tenant_id',
-  'name',
-  'doc_type',
-  'expiry_date',
-  'file_url'
-], 'Document');
-
-app.post(
-  '/documents/upload',
-  requireAuth,
-  requireAdmin,
-  upload.single('file'),
-  (req, res) => {
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded' });
-    }
-
-    res.json({
-      file_url: `/uploads/documents/${req.file.filename}`,
-      original_name: req.file.originalname,
-    });
-  }
+adminCrud(
+  '/properties',
+  'properties',
+  ['address', 'city', 'postcode', 'status', 'monthly_rent', 'bedrooms', 'property_type'],
+  'Property'
 );
 
-adminCrud('/expenses', 'expenses', [
-  'property_id',
-  'date',
-  'category',
-  'description',
-  'amount',
-  'supplier',
-  'receipt_url',
-  'notes'
-], 'Expense');
+adminCrud(
+  '/tenants',
+  'tenants',
+  ['property_id', 'name', 'email', 'phone', 'lease_start', 'lease_end', 'payment_status'],
+  'Tenant'
+);
+
+adminCrud(
+  '/rent-payments',
+  'rent_payments',
+  ['tenant_id', 'property_id', 'due_date', 'amount', 'status', 'paid_date', 'payment_method', 'notes'],
+  'Rent payment'
+);
+
+adminCrud(
+  '/maintenance-admin',
+  'maintenance_tickets',
+  ['property_id', 'tenant_id', 'title', 'description', 'urgency', 'status', 'contractor', 'cost', 'notes'],
+  'Maintenance ticket'
+);
+
+adminCrud(
+  '/documents',
+  'documents',
+  ['property_id', 'tenant_id', 'name', 'doc_type', 'expiry_date', 'file_url'],
+  'Document'
+);
+
+adminCrud(
+  '/documents',
+  'documents',
+  ['property_id', 'tenant_id', 'name', 'doc_type', 'expiry_date', 'file_url'],
+  'Document'
+);
+
+app.post('/documents/upload', requireAuth, requireAdmin, upload.single('file'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No file uploaded' });
+  }
+
+  res.json({
+    file_url: `/uploads/documents/${req.file.filename}`,
+    original_name: req.file.originalname,
+  });
+});
+
+adminCrud(
+  '/expenses',
+  'expenses',
+  ['property_id', 'date', 'category', 'description', 'amount', 'supplier', 'receipt_url', 'notes'],
+  'Expense'
+);
 
 const port = Number(process.env.PORT || 3000);
-
 await initDatabase();
-
 app.listen(port, () => console.log(`PropManager API listening on ${port}`));
