@@ -5,7 +5,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import { query } from './db.js';
-import { comparePassword, requireAdmin, requireAuth, signUser } from './auth.js';
+import { comparePassword, hashPassword, requireAdmin, requireAuth, signUser } from './auth.js';
 import multer from 'multer';
 
 const app = express();
@@ -15,8 +15,27 @@ app.use(express.json({ limit: '10mb' }));
 app.use(morgan('combined'));
 app.use('/uploads', express.static('/app/uploads'));
 
+const uploadStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    cb(null, '/app/uploads/documents');
+  },
+  filename: (_req, file, cb) => {
+    const originalName = file.originalname || 'document';
+    const dotIndex = originalName.lastIndexOf('.');
+    const ext = dotIndex > -1 ? originalName.slice(dotIndex).toLowerCase() : '';
+    const nameWithoutExt = dotIndex > -1 ? originalName.slice(0, dotIndex) : originalName;
+    const safeBaseName =
+      nameWithoutExt
+        .replace(/[^a-zA-Z0-9-_ ]/g, '')
+        .trim()
+        .replace(/\s+/g, '-') || 'document';
+
+    cb(null, `${safeBaseName}-${Date.now()}${ext}`);
+  },
+});
+
 const upload = multer({
-  dest: '/app/uploads/documents',
+  storage: uploadStorage,
 });
 
 const tenantFilter = (user, alias = '') => user.role === 'admin' ? { sql: '', params: [] } : { sql: ` where ${alias}tenant_id = $1`, params: [user.tenant_id] };
@@ -34,6 +53,112 @@ app.post('/auth/login', async (req, res) => {
 });
 
 app.get('/auth/me', requireAuth, (req, res) => res.json({ user: req.user }));
+
+app.get('/admin/accounts', requireAuth, requireAdmin, async (_req, res) => {
+  const { rows } = await query(
+    `select u.id,
+            u.name,
+            u.email,
+            u.role,
+            u.tenant_id,
+            u.active,
+            row_to_json(t.*) as tenant
+       from app_users u
+       left join tenants t on t.id = u.tenant_id
+      order by u.role, u.name`
+  );
+
+  res.json(rows);
+});
+
+app.post('/admin/accounts', requireAuth, requireAdmin, async (req, res) => {
+  const {
+    name,
+    email,
+    password,
+    role = 'tenant',
+    tenant_id = null,
+    active = true,
+  } = req.body || {};
+
+  if (!name || !email || !password) {
+    return res.status(400).json({ error: 'Name, email and password are required' });
+  }
+
+  if (!['admin', 'tenant'].includes(role)) {
+    return res.status(400).json({ error: 'Role must be admin or tenant' });
+  }
+
+  if (role === 'tenant' && !tenant_id) {
+    return res.status(400).json({ error: 'Tenant accounts must be linked to a tenant' });
+  }
+
+  const passwordHash = await hashPassword(password);
+  const accountTenantId = role === 'tenant' ? tenant_id : null;
+
+  try {
+    const { rows } = await query(
+      `insert into app_users(name, email, password_hash, role, tenant_id, active)
+       values ($1, $2, $3, $4, $5, $6)
+       returning id, name, email, role, tenant_id, active`,
+      [name, email, passwordHash, role, accountTenantId, active]
+    );
+
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    if (err?.code === '23505') {
+      return res.status(409).json({ error: 'An account with this email already exists' });
+    }
+    throw err;
+  }
+});
+
+app.patch('/admin/accounts/:id', requireAuth, requireAdmin, async (req, res) => {
+  const allowedFields = ['name', 'email', 'role', 'tenant_id', 'active'];
+  const updates = [];
+  const values = [req.params.id];
+
+  for (const field of allowedFields) {
+    if (Object.prototype.hasOwnProperty.call(req.body, field)) {
+      let value = req.body[field];
+
+      if (field === 'role' && !['admin', 'tenant'].includes(value)) {
+        return res.status(400).json({ error: 'Role must be admin or tenant' });
+      }
+
+      if (field === 'tenant_id' && req.body.role === 'admin') {
+        value = null;
+      }
+
+      values.push(value);
+      updates.push(`${field}=$${values.length}`);
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(req.body, 'password') && req.body.password) {
+    values.push(await hashPassword(req.body.password));
+    updates.push(`password_hash=$${values.length}`);
+  }
+
+  if (!updates.length) {
+    return res.status(400).json({ error: 'No fields supplied to update' });
+  }
+
+  try {
+    const { rows } = await query(
+      `update app_users set ${updates.join(', ')} where id=$1 returning id, name, email, role, tenant_id, active`,
+      values
+    );
+
+    sendOneOr404(res, rows, 'Account');
+  } catch (err) {
+    if (err?.code === '23505') {
+      return res.status(409).json({ error: 'An account with this email already exists' });
+    }
+    throw err;
+  }
+});
+
 
 app.get('/dashboard', requireAuth, async (req, res) => {
   const params = req.user.role === 'admin' ? [] : [req.user.tenant_id];

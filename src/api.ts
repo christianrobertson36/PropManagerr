@@ -1,4 +1,4 @@
-import type { DashboardData, MaintenanceTicket, Tenant, User } from './types';
+import type { DashboardData, MaintenanceTicket, User } from './types';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 
@@ -58,17 +58,17 @@ export type DocumentUploadResponse = {
   original_name: string;
 };
 
-export type UserAccount = {
+export type AdminAccount = {
   id: string;
   name: string;
   email: string;
   role: 'admin' | 'tenant';
   tenant_id: string | null;
   active: boolean;
-  tenant?: Tenant | null;
+  tenant?: { id: string; name: string; email?: string } | null;
 };
 
-export type UserAccountPayload = {
+export type AdminAccountPayload = {
   name?: string;
   email?: string;
   password?: string;
@@ -138,6 +138,20 @@ export const api = {
     request('/maintenance', {
       method: 'POST',
       body: JSON.stringify(ticket),
+    }),
+
+  listAdminAccounts: () => request<AdminAccount[]>('/admin/accounts'),
+
+  createAdminAccount: (account: AdminAccountPayload) =>
+    request<AdminAccount>('/admin/accounts', {
+      method: 'POST',
+      body: JSON.stringify(account),
+    }),
+
+  updateAdminAccount: (id: string, account: AdminAccountPayload) =>
+    request<AdminAccount>(`/admin/accounts/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(account),
     }),
 
   createProperty: (property: PropertyPayload) =>
@@ -217,20 +231,6 @@ export const api = {
   deleteDocument: (id: string) =>
     request(`/documents/${id}`, {
       method: 'DELETE',
-    }),
-
-  adminUsers: () => request<UserAccount[]>('/admin/users'),
-
-  createUserAccount: (account: UserAccountPayload) =>
-    request<UserAccount>('/admin/users', {
-      method: 'POST',
-      body: JSON.stringify(account),
-    }),
-
-  updateUserAccount: (id: string, account: UserAccountPayload) =>
-    request<UserAccount>(`/admin/users/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify(account),
     }),
 
   uploadDocument: async (file: File): Promise<DocumentUploadResponse> => {
