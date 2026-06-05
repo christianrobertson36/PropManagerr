@@ -43,11 +43,6 @@ const uploadStorage = multer.diskStorage({
 
 const upload = multer({ storage: uploadStorage });
 
-const tenantFilter = (user, alias = '') =>
-  user.role === 'admin'
-    ? { sql: '', params: [] }
-    : { sql: ` where ${alias}tenant_id = $1`, params: [user.tenant_id] };
-
 async function resolveTenantAccountLink(user) {
   if (!user || user.role !== 'tenant' || user.tenant_id) return user;
 
@@ -187,36 +182,40 @@ app.patch('/admin/accounts/:id', requireAuth, requireAdmin, async (req, res) => 
 
 app.get('/dashboard', requireAuth, async (req, res) => {
   const currentUser = await resolveTenantAccountLink(req.user);
-  const params = currentUser.role === 'admin' ? [] : [currentUser.tenant_id];
-  const propertyWhere = currentUser.role === 'admin' ? '' : ' where id in (select property_id from tenants where id=$1)';
-  const tenantWhere = tenantFilter(currentUser);
-  const rentWhere = tenantFilter(currentUser);
-  const maintWhere =
-    currentUser.role === 'admin'
-      ? ''
-      : ' where tenant_id=$1 or property_id in (select property_id from tenants where id=$1)';
-  const docWhere =
-    currentUser.role === 'admin'
-      ? ''
-      : ' where d.tenant_id=$1 or d.property_id in (select property_id from tenants where id=$1) or (d.tenant_id is null and d.property_id is null)';
-  const expenseWhere = currentUser.role === 'admin' ? '' : ' where false';
+  const isAdmin = currentUser.role === 'admin';
+  const tenantParams = isAdmin ? [] : [currentUser.tenant_id];
+
+  const propertyWhere = isAdmin
+    ? ''
+    : ' where id in (select property_id from tenants where tenants.id=$1)';
+
+  const tenantWhere = isAdmin ? '' : ' where t.id=$1';
+  const rentWhere = isAdmin ? '' : ' where r.tenant_id=$1';
+
+  const maintWhere = isAdmin
+    ? ''
+    : ' where m.tenant_id=$1 or m.property_id in (select property_id from tenants where tenants.id=$1)';
+
+  const docWhere = isAdmin
+    ? ''
+    : ' where d.tenant_id=$1 or d.property_id in (select property_id from tenants where tenants.id=$1) or (d.tenant_id is null and d.property_id is null)';
 
   const [properties, tenants, rentPayments, maintenanceTickets, documents, expenses] = await Promise.all([
-    query(`select * from properties${propertyWhere} order by address`, params),
+    query(`select * from properties${propertyWhere} order by address`, tenantParams),
     query(
       `select t.*, row_to_json(p.*) as property
        from tenants t
-       left join properties p on p.id=t.property_id${tenantWhere.sql}
+       left join properties p on p.id=t.property_id${tenantWhere}
        order by t.name`,
-      tenantWhere.params
+      tenantParams
     ),
     query(
       `select r.*, row_to_json(t.*) as tenant, row_to_json(p.*) as property
        from rent_payments r
        left join tenants t on t.id=r.tenant_id
-       left join properties p on p.id=r.property_id${rentWhere.sql}
+       left join properties p on p.id=r.property_id${rentWhere}
        order by due_date desc`,
-      rentWhere.params
+      tenantParams
     ),
     query(
       `select m.*, row_to_json(p.*) as property, row_to_json(t.*) as tenant
@@ -224,7 +223,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
        left join properties p on p.id=m.property_id
        left join tenants t on t.id=m.tenant_id${maintWhere}
        order by m.created_at desc`,
-      params
+      tenantParams
     ),
     query(
       `select d.*, row_to_json(p.*) as property, row_to_json(t.*) as tenant
@@ -232,14 +231,14 @@ app.get('/dashboard', requireAuth, async (req, res) => {
        left join properties p on p.id=d.property_id
        left join tenants t on t.id=d.tenant_id${docWhere}
        order by d.expiry_date nulls last`,
-      params
+      tenantParams
     ),
     query(
       `select e.*, row_to_json(p.*) as property
        from expenses e
-       left join properties p on p.id=e.property_id${expenseWhere}
+       left join properties p on p.id=e.property_id${isAdmin ? '' : ' where false'}
        order by date desc`,
-      params
+      []
     ),
   ]);
 
@@ -303,15 +302,16 @@ app.get('/compliance/updates', requireAuth, (_req, res) => {
 });
 
 app.post('/maintenance', requireAuth, async (req, res) => {
+  const currentUser = await resolveTenantAccountLink(req.user);
   const { title, description, property_id, urgency = 'medium' } = req.body || {};
 
   if (!title || !description || !property_id) {
     return res.status(400).json({ error: 'Title, description and property are required' });
   }
 
-  if (req.user.role !== 'admin') {
+  if (currentUser.role !== 'admin') {
     const allowed = await query('select 1 from tenants where id=$1 and property_id=$2', [
-      req.user.tenant_id,
+      currentUser.tenant_id,
       property_id,
     ]);
 
@@ -320,7 +320,7 @@ app.post('/maintenance', requireAuth, async (req, res) => {
     }
   }
 
-  const tenantId = req.user.role === 'tenant' ? req.user.tenant_id : req.body.tenant_id || null;
+  const tenantId = currentUser.role === 'tenant' ? currentUser.tenant_id : req.body.tenant_id || null;
   const { rows } = await query(
     'insert into maintenance_tickets(title, description, property_id, tenant_id, urgency, status) values ($1,$2,$3,$4,$5,$6) returning *',
     [title, description, property_id, tenantId, urgency, 'open']
