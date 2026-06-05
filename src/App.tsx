@@ -50,7 +50,7 @@ type PageConfig = {
   adminOnly?: boolean;
 };
 
-const APP_VERSION = 'v34';
+const APP_VERSION = 'v36';
 
 const emptyDashboard: DashboardData = {
   properties: [],
@@ -1195,55 +1195,193 @@ function Documents({ data, refresh, user }: { data: DashboardData; refresh: () =
 
 function Expenses({ data, refresh }: { data: DashboardData; refresh: () => Promise<void> }) {
   const [editing, setEditing] = useState<Expense | null>(null);
-  const [form, setForm] = useState<ExpensePayload>({ property_id: '', date: dateOnly(new Date().toISOString()), category: '', description: '', amount: 0 });
+  const [propertyFilter, setPropertyFilter] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [monthFilter, setMonthFilter] = useState(dateOnly(new Date().toISOString()).slice(0, 7));
+  const [formError, setFormError] = useState('');
+  const [form, setForm] = useState<ExpensePayload>({
+    property_id: '',
+    date: dateOnly(new Date().toISOString()),
+    category: '',
+    description: '',
+    amount: 0,
+  });
+
+  const categories = Array.from(new Set(data.expenses.map(expense => expense.category).filter(Boolean))).sort();
+  const currentYear = String(new Date().getFullYear());
+
+  const filteredExpenses = data.expenses
+    .filter(expense => !propertyFilter || expense.property_id === propertyFilter)
+    .filter(expense => !categoryFilter || expense.category === categoryFilter)
+    .filter(expense => !monthFilter || dateOnly(expense.date).startsWith(monthFilter))
+    .sort((a, b) => new Date(b.date || '').getTime() - new Date(a.date || '').getTime());
+
+  const allTimeTotal = data.expenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+  const filteredTotal = filteredExpenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+  const monthTotal = data.expenses
+    .filter(expense => dateOnly(expense.date).startsWith(monthFilter))
+    .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+  const yearTotal = data.expenses
+    .filter(expense => dateOnly(expense.date).startsWith(currentYear))
+    .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+
+  const propertyTotals = data.properties
+    .map(property => ({
+      property,
+      total: data.expenses
+        .filter(expense => expense.property_id === property.id)
+        .reduce((sum, expense) => sum + Number(expense.amount || 0), 0),
+    }))
+    .filter(row => row.total > 0)
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 5);
+
+  const categoryTotals = categories
+    .map(category => ({
+      category,
+      total: data.expenses
+        .filter(expense => expense.category === category)
+        .reduce((sum, expense) => sum + Number(expense.amount || 0), 0),
+    }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 5);
 
   function startEdit(expense: Expense) {
+    setFormError('');
     setEditing(expense);
-    setForm({ property_id: expense.property_id || '', date: dateOnly(expense.date), category: expense.category, description: expense.description, amount: expense.amount });
+    setForm({
+      property_id: expense.property_id || '',
+      date: dateOnly(expense.date),
+      category: expense.category,
+      description: expense.description,
+      amount: expense.amount,
+    });
   }
 
   function reset() {
+    setFormError('');
     setEditing(null);
     setForm({ property_id: '', date: dateOnly(new Date().toISOString()), category: '', description: '', amount: 0 });
   }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    const payload = { ...form, property_id: form.property_id || null };
-    if (editing) await api.updateExpense(editing.id, payload);
-    else await api.createExpense(payload);
-    reset();
-    await refresh();
+    setFormError('');
+    try {
+      const payload = { ...form, property_id: form.property_id || null, amount: Number(form.amount || 0) };
+      if (editing) await api.updateExpense(editing.id, payload);
+      else await api.createExpense(payload);
+      reset();
+      await refresh();
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Could not save expense');
+    }
   }
 
   async function remove(id: string) {
-    await api.deleteExpense(id);
-    await refresh();
+    if (!window.confirm('Delete this expense record?')) return;
+    setFormError('');
+    try {
+      await api.deleteExpense(id);
+      await refresh();
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Could not delete expense');
+    }
   }
 
   return (
-    <CrudLayout title={editing ? 'Edit expense' : 'Add expense'} onSubmit={submit} onCancel={reset} editing={Boolean(editing)}>
-      <Select<string> label="Property" value={fieldValue(form.property_id)} onChange={value => setForm({ ...form, property_id: value || null })}>
-        <option value="">No property</option>
-        {data.properties.map(property => <option key={property.id} value={property.id}>{property.address}</option>)}
-      </Select>
-      <Input label="Date" type="date" value={fieldValue(form.date)} onChange={value => setForm({ ...form, date: value })} />
-      <Input label="Category" value={fieldValue(form.category)} onChange={value => setForm({ ...form, category: value })} required />
-      <Input label="Description" value={fieldValue(form.description)} onChange={value => setForm({ ...form, description: value })} />
-      <Input label="Amount" type="number" value={fieldValue(form.amount)} onChange={value => setForm({ ...form, amount: Number(value) })} />
+    <div className="space-y-6">
+      <div className="grid gap-4 md:grid-cols-4">
+        <Stat label="This month" value={money(monthTotal)} icon={Receipt} />
+        <Stat label="Year to date" value={money(yearTotal)} icon={ClipboardList} />
+        <Stat label="Filtered total" value={money(filteredTotal)} icon={AlertTriangle} />
+        <Stat label="All expenses" value={money(allTimeTotal)} icon={Building2} />
+      </div>
+
+      <Card title={editing ? 'Edit expense' : 'Add expense'}>
+        {formError && (
+          <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+            {formError}
+          </div>
+        )}
+        <form onSubmit={submit} className="grid gap-4 md:grid-cols-3">
+          <Select<string> label="Property" value={fieldValue(form.property_id)} onChange={value => setForm({ ...form, property_id: value || null })}>
+            <option value="">No property</option>
+            {data.properties.map(property => <option key={property.id} value={property.id}>{property.address}</option>)}
+          </Select>
+          <Input label="Date" type="date" value={fieldValue(form.date)} onChange={value => setForm({ ...form, date: value })} />
+          <Input label="Amount" type="number" value={fieldValue(form.amount)} onChange={value => setForm({ ...form, amount: Number(value) })} />
+          <Input label="Category" value={fieldValue(form.category)} onChange={value => setForm({ ...form, category: value })} required />
+          <Input label="Description" value={fieldValue(form.description)} onChange={value => setForm({ ...form, description: value })} />
+          <div className="flex items-end gap-2">
+            <Button type="submit">{editing ? 'Save changes' : 'Add expense'}</Button>
+            {editing && <Button variant="secondary" onClick={reset}>Cancel</Button>}
+          </div>
+        </form>
+      </Card>
+
+      <Card title="Expense filters">
+        <div className="grid gap-4 md:grid-cols-3">
+          <Select<string> label="Property" value={propertyFilter} onChange={value => setPropertyFilter(value)}>
+            <option value="">All properties</option>
+            {data.properties.map(property => <option key={property.id} value={property.id}>{property.address}</option>)}
+          </Select>
+          <Select<string> label="Category" value={categoryFilter} onChange={value => setCategoryFilter(value)}>
+            <option value="">All categories</option>
+            {categories.map(category => <option key={category} value={category}>{category}</option>)}
+          </Select>
+          <Input label="Month" type="month" value={monthFilter} onChange={setMonthFilter} />
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button variant="secondary" onClick={() => { setPropertyFilter(''); setCategoryFilter(''); setMonthFilter(''); }}>Clear filters</Button>
+          <Button variant="secondary" onClick={() => setMonthFilter(dateOnly(new Date().toISOString()).slice(0, 7))}>This month</Button>
+        </div>
+      </Card>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card title="Top properties by spend">
+          {propertyTotals.length === 0 ? (
+            <p className="text-sm text-slate-600">No property expenses recorded yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {propertyTotals.map(row => (
+                <div key={row.property.id} className="flex items-center justify-between rounded-lg border border-slate-200 p-3 text-sm">
+                  <span className="font-medium text-slate-800">{row.property.address}</span>
+                  <span className="font-semibold text-slate-900">{money(row.total)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+
+        <Card title="Top categories">
+          {categoryTotals.length === 0 ? (
+            <p className="text-sm text-slate-600">No expense categories recorded yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {categoryTotals.map(row => (
+                <div key={row.category} className="flex items-center justify-between rounded-lg border border-slate-200 p-3 text-sm">
+                  <span className="font-medium text-slate-800">{row.category}</span>
+                  <span className="font-semibold text-slate-900">{money(row.total)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      </div>
 
       <Table
         columns={['Date', 'Property', 'Category', 'Description', 'Amount', 'Actions']}
-        rows={data.expenses.map(expense => [
+        rows={filteredExpenses.map(expense => [
           dateOnly(expense.date),
           expense.property?.address || '-',
           expense.category,
-          expense.description,
+          expense.description || '-',
           money(expense.amount),
           <Actions onEdit={() => startEdit(expense)} onDelete={() => remove(expense.id)} />,
         ])}
       />
-    </CrudLayout>
+    </div>
   );
 }
 
