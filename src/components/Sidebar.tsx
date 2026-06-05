@@ -41,7 +41,7 @@ export function Sidebar({ visiblePages, currentPage, onPageChange, version }: Si
 
       <div className="border-t border-slate-800 px-5 py-3 text-xs text-slate-400 space-y-1">
         <div>Version {version}</div>
-        <div>© 2026 Christian Robertson</div>
+        <div>&copy; 2026 Christian Robertson</div>
         <div>Licensed under MIT</div>
       </div>
     </aside>
