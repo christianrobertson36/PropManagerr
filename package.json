@@ -44,7 +44,8 @@
     "appId": "com.propmanagerr.desktop",
     "productName": "PropManagerr",
     "directories": {
-      "output": "release"
+      "output": "release",
+      "buildResources": "build"
     },
     "files": [
       "electron/**/*",
@@ -54,7 +55,8 @@
     "win": {
       "target": [
         "nsis"
-      ]
+      ],
+      "icon": "build/icon.ico"
     }
   }
 }

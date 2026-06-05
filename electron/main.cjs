@@ -60,6 +60,7 @@ function createMainWindow() {
     minHeight: 700,
     title: 'PropManagerr',
     backgroundColor: '#0f172a',
+    icon: path.join(__dirname, '../build/icon.ico'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       nodeIntegration: false,
