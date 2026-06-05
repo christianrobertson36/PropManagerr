@@ -766,7 +766,7 @@ export default function App() {
         visiblePages={visiblePages}
         currentPage={page}
         onPageChange={setPage}
-        version="v18"
+        version="v21"
       />
 
       <main className="flex-1">
