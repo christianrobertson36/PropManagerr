@@ -1,0 +1,16 @@
+1) Add this type near the other exported types in src/api.ts:
+
+export type ComplianceUpdate = {
+  id: string;
+  title: string;
+  summary: string;
+  source: string;
+  url: string;
+  effective_date: string | null;
+  last_checked: string;
+  severity: 'info' | 'important' | 'required';
+};
+
+2) Add this method inside export const api = { ... }:
+
+complianceUpdates: () => request<ComplianceUpdate[]>('/compliance/updates'),

@@ -19,6 +19,7 @@ import { TenantPortal } from './pages/TenantPortalPage';
 import type {
   AdminAccount,
   AdminAccountPayload,
+  ComplianceUpdate,
   DocumentPayload,
   ExpensePayload,
   PropertyPayload,
@@ -235,13 +236,34 @@ function Login({ onLogin }: { onLogin: (user: User) => void }) {
 }
 
 function Dashboard({ data }: { data: DashboardData; user: User }) {
+  const [updates, setUpdates] = useState<ComplianceUpdate[]>([]);
+  const [updatesError, setUpdatesError] = useState('');
+
   const paid = data.rentPayments.filter(payment => payment.status === 'paid').reduce((sum, payment) => sum + payment.amount, 0);
   const outstanding = data.rentPayments.filter(payment => payment.status !== 'paid').reduce((sum, payment) => sum + payment.amount, 0);
   const openRepairs = data.maintenanceTickets.filter(ticket => ticket.status !== 'resolved').length;
+  const overduePayments = data.rentPayments.filter(payment => payment.status === 'overdue').length;
+  const vacantProperties = data.properties.filter(property => property.status === 'vacant').length;
   const expiring = data.documents.filter(document => {
     const days = daysUntil(document.expiry_date);
     return days !== null && days <= 90;
   });
+
+  useEffect(() => {
+    let cancelled = false;
+
+    api.complianceUpdates()
+      .then(rows => {
+        if (!cancelled) setUpdates(rows);
+      })
+      .catch(err => {
+        if (!cancelled) setUpdatesError(err instanceof Error ? err.message : 'Could not load compliance updates');
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -252,25 +274,94 @@ function Dashboard({ data }: { data: DashboardData; user: User }) {
         <Stat label="Open repairs" value={String(openRepairs)} icon={Wrench} />
       </div>
 
-      <Card title="Compliance reminders">
-        {expiring.length === 0 ? (
-          <p className="text-sm text-slate-600">No documents expiring in the next 90 days.</p>
-        ) : (
-          <div className="space-y-2">
-            {expiring.map(document => {
-              const days = daysUntil(document.expiry_date);
-              return (
-                <div key={document.id} className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
-                  <span className="font-medium text-amber-900">{document.name}</span>
-                  <span className="text-amber-700">
-                    {days !== null && days < 0 ? `${Math.abs(days)} days overdue` : `${days} days left`}
-                  </span>
-                </div>
-              );
-            })}
+      <div className="grid gap-6 xl:grid-cols-3">
+        <div className="space-y-6 xl:col-span-2">
+          <Card title="Needs attention">
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="rounded-xl border border-rose-100 bg-rose-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-rose-700">Overdue rent</p>
+                <p className="mt-2 text-2xl font-bold text-rose-900">{overduePayments}</p>
+                <p className="text-sm text-rose-700">payments marked overdue</p>
+              </div>
+              <div className="rounded-xl border border-amber-100 bg-amber-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Compliance</p>
+                <p className="mt-2 text-2xl font-bold text-amber-900">{expiring.length}</p>
+                <p className="text-sm text-amber-700">documents expiring soon</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Vacant</p>
+                <p className="mt-2 text-2xl font-bold text-slate-900">{vacantProperties}</p>
+                <p className="text-sm text-slate-600">properties available</p>
+              </div>
+            </div>
+          </Card>
+
+          <Card title="Compliance reminders">
+            {expiring.length === 0 ? (
+              <p className="text-sm text-slate-600">No documents expiring in the next 90 days.</p>
+            ) : (
+              <div className="space-y-2">
+                {expiring.map(document => {
+                  const days = daysUntil(document.expiry_date);
+                  const overdue = days !== null && days < 0;
+                  return (
+                    <div key={document.id} className={`flex items-center justify-between rounded-lg border p-3 text-sm ${overdue ? 'border-rose-200 bg-rose-50' : 'border-amber-200 bg-amber-50'}`}>
+                      <div>
+                        <p className={`font-medium ${overdue ? 'text-rose-900' : 'text-amber-900'}`}>{document.name}</p>
+                        <p className={overdue ? 'text-rose-700' : 'text-amber-700'}>{document.property?.address || document.tenant?.name || 'General document'}</p>
+                      </div>
+                      <span className={overdue ? 'text-rose-700' : 'text-amber-700'}>
+                        {days !== null && days < 0 ? `${Math.abs(days)} days overdue` : `${days} days left`}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Card>
+        </div>
+
+        <Card title="Compliance Updates / Legal Changes">
+          <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+            Official-source links for awareness only. This is not legal advice.
           </div>
-        )}
-      </Card>
+
+          {updatesError && (
+            <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              {updatesError}
+            </div>
+          )}
+
+          {updates.length === 0 && !updatesError ? (
+            <p className="text-sm text-slate-600">Loading compliance updates...</p>
+          ) : (
+            <div className="space-y-3">
+              {updates.map(update => (
+                <a
+                  key={update.id}
+                  href={update.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block rounded-xl border border-slate-200 p-4 transition hover:border-emerald-300 hover:bg-emerald-50"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-slate-900">{update.title}</p>
+                      <p className="mt-1 text-sm text-slate-600">{update.summary}</p>
+                    </div>
+                    <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">{update.severity}</span>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
+                    <span>{update.source}</span>
+                    {update.effective_date && <span>Effective: {dateOnly(update.effective_date)}</span>}
+                    {update.last_checked && <span>Checked: {dateOnly(update.last_checked)}</span>}
+                  </div>
+                </a>
+              ))}
+            </div>
+          )}
+        </Card>
+      </div>
     </div>
   );
 }

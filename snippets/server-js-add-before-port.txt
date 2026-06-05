@@ -1,0 +1,48 @@
+// Compliance Updates / Legal Changes
+// Awareness links only. This endpoint does not provide legal advice.
+const complianceUpdates = [
+  {
+    id: 'renters-rights-act-2025',
+    title: "Renters' Rights Act 2025",
+    summary: 'Official GOV.UK roadmap for private rented sector reforms and landlord preparation.',
+    source: 'GOV.UK',
+    url: 'https://www.gov.uk/government/publications/renters-rights-act-2025-implementation-roadmap/implementing-the-renters-rights-act-2025-our-roadmap-for-reforming-the-private-rented-sector',
+    effective_date: '2026-05-01',
+    last_checked: '2026-06-05',
+    severity: 'important',
+  },
+  {
+    id: 'right-to-rent-share-code',
+    title: 'Right to rent checks',
+    summary: 'Official GOV.UK service for checking a tenant\'s right to rent in England using a share code.',
+    source: 'GOV.UK',
+    url: 'https://www.gov.uk/view-right-to-rent',
+    effective_date: null,
+    last_checked: '2026-06-05',
+    severity: 'required',
+  },
+  {
+    id: 'gas-safety-responsibilities',
+    title: 'Gas safety responsibilities',
+    summary: 'GOV.UK guidance covering landlord gas safety checks and tenant gas safety records.',
+    source: 'GOV.UK',
+    url: 'https://www.gov.uk/private-renting/your-landlords-safety-responsibilities',
+    effective_date: null,
+    last_checked: '2026-06-05',
+    severity: 'required',
+  },
+  {
+    id: 'smoke-carbon-monoxide-alarms',
+    title: 'Smoke and carbon monoxide alarms',
+    summary: 'Official guidance for smoke and carbon monoxide alarm duties in private rented homes.',
+    source: 'GOV.UK',
+    url: 'https://www.gov.uk/government/publications/smoke-and-carbon-monoxide-alarms-explanatory-booklet-for-landlords/the-smoke-and-carbon-monoxide-alarm-england-regulations-2015-qa-booklet-for-the-private-rented-sector-landlords-and-tenants',
+    effective_date: null,
+    last_checked: '2026-06-05',
+    severity: 'required',
+  },
+];
+
+app.get('/compliance/updates', requireAuth, (_req, res) => {
+  res.json(complianceUpdates);
+});
