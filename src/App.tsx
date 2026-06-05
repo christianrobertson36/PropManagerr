@@ -953,7 +953,7 @@ export default function App() {
           ))}
         </nav>
         <div className="border-t border-slate-800 px-5 py-3 text-xs text-slate-400">
-          Version v16
+          Version v18
         </div>
       </aside>
 
