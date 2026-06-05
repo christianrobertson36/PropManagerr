@@ -48,6 +48,21 @@ const tenantFilter = (user, alias = '') =>
     ? { sql: '', params: [] }
     : { sql: ` where ${alias}tenant_id = $1`, params: [user.tenant_id] };
 
+async function resolveTenantAccountLink(user) {
+  if (!user || user.role !== 'tenant' || user.tenant_id) return user;
+
+  const { rows } = await query(
+    'select id from tenants where lower(email)=lower($1) limit 1',
+    [user.email]
+  );
+
+  const tenant = rows[0];
+  if (!tenant) return user;
+
+  await query('update app_users set tenant_id=$2 where id=$1', [user.id, tenant.id]);
+  return { ...user, tenant_id: tenant.id };
+}
+
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
 app.post('/auth/login', async (req, res) => {
@@ -62,12 +77,13 @@ app.post('/auth/login', async (req, res) => {
     [email]
   );
 
-  const user = rows[0];
+  let user = rows[0];
   if (!user || !(await comparePassword(password, user.password_hash))) {
     return res.status(401).json({ error: 'Invalid login' });
   }
 
   delete user.password_hash;
+  user = await resolveTenantAccountLink(user);
   res.json({ token: signUser(user), user });
 });
 
@@ -170,19 +186,20 @@ app.patch('/admin/accounts/:id', requireAuth, requireAdmin, async (req, res) => 
 });
 
 app.get('/dashboard', requireAuth, async (req, res) => {
-  const params = req.user.role === 'admin' ? [] : [req.user.tenant_id];
-  const propertyWhere = req.user.role === 'admin' ? '' : ' where id in (select property_id from tenants where id=$1)';
-  const tenantWhere = tenantFilter(req.user);
-  const rentWhere = tenantFilter(req.user);
+  const currentUser = await resolveTenantAccountLink(req.user);
+  const params = currentUser.role === 'admin' ? [] : [currentUser.tenant_id];
+  const propertyWhere = currentUser.role === 'admin' ? '' : ' where id in (select property_id from tenants where id=$1)';
+  const tenantWhere = tenantFilter(currentUser);
+  const rentWhere = tenantFilter(currentUser);
   const maintWhere =
-    req.user.role === 'admin'
+    currentUser.role === 'admin'
       ? ''
       : ' where tenant_id=$1 or property_id in (select property_id from tenants where id=$1)';
   const docWhere =
-    req.user.role === 'admin'
+    currentUser.role === 'admin'
       ? ''
       : ' where d.tenant_id=$1 or d.property_id in (select property_id from tenants where id=$1) or (d.tenant_id is null and d.property_id is null)';
-  const expenseWhere = req.user.role === 'admin' ? '' : ' where false';
+  const expenseWhere = currentUser.role === 'admin' ? '' : ' where false';
 
   const [properties, tenants, rentPayments, maintenanceTickets, documents, expenses] = await Promise.all([
     query(`select * from properties${propertyWhere} order by address`, params),
@@ -485,6 +502,14 @@ adminCrud(
 
 async function applyRuntimeMigrations() {
   await query('alter table documents alter column property_id drop not null');
+  await query(`
+    update app_users u
+    set tenant_id = t.id
+    from tenants t
+    where u.role = 'tenant'
+      and u.tenant_id is null
+      and lower(u.email) = lower(t.email)
+  `);
 }
 
 const port = Number(process.env.PORT || 3000);
