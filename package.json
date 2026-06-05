@@ -35,5 +35,26 @@
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.3.0",
     "vite": "^5.4.2"
+  },
+  "main": "electron/main.cjs",
+  "productName": "PropManagerr",
+  "description": "PropManagerr Windows desktop app",
+  "author": "Christian Robertson",
+  "build": {
+    "appId": "com.propmanagerr.desktop",
+    "productName": "PropManagerr",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "electron/**/*",
+      "package.json",
+      "README-ELECTRON.txt"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    }
   }
 }
