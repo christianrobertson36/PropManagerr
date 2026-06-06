@@ -16,7 +16,7 @@ function createMainWindow() {
     height: 850,
     minWidth: 1024,
     minHeight: 700,
-    title: 'PropManagerr Local Desktop',
+    title: 'PropManagerr Local SQLite',
     backgroundColor: '#0f172a',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -75,8 +75,8 @@ function buildMenu() {
           click: () => {
             dialog.showMessageBox(mainWindow, {
               type: 'info',
-              title: 'About PropManagerr Local Desktop',
-              message: 'PropManagerr Local Desktop',
+              title: 'About PropManagerr Local SQLite',
+              message: 'PropManagerr Local SQLite',
               detail: `Windows desktop edition\nVersion ${app.getVersion()}\nWindows ${os.release()}\nLocal SQLite database`,
             });
           },
@@ -122,7 +122,7 @@ ipcMain.handle('local:admin-accounts:list', () => localDb.listAdminAccounts());
 ipcMain.handle('local:admin-accounts:create', (_event, account) => localDb.createAdminAccount(account));
 ipcMain.handle('local:admin-accounts:update', (_event, { id, account }) => localDb.updateAdminAccount(id, account));
 
-ipcMain.handle('local:admin-accounts:delete', (_event, id) => localDb.deleteAdminAccount(id)); app.whenReady().then(() => { app.setAppUserModelId('com.propmanagerr.localdesktop');
+ipcMain.handle('local:admin-accounts:delete', (_event, id) => localDb.deleteAdminAccount(id)); app.whenReady().then(() => { app.setAppUserModelId('com.propmanagerr.localsqlite');
   buildMenu();
   createMainWindow();
 

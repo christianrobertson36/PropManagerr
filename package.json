@@ -39,12 +39,12 @@
     "vite": "^5.4.2"
   },
   "main": "electron/main.cjs",
-  "productName": "PropManagerr Local Desktop",
+  "productName": "PropManagerr Local SQLite",
   "description": "PropManagerr offline Windows desktop app with local SQLite database",
   "author": "Christian Robertson",
   "build": {
-    "appId": "com.propmanagerr.localdesktop",
-    "productName": "PropManagerr Local Desktop",
+    "appId": "com.propmanagerr.localsqlite",
+    "productName": "PropManagerr Local SQLite",
     "directories": {
       "output": "release-local"
     },
@@ -64,9 +64,9 @@
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
-      "shortcutName": "PropManagerr Local Desktop",
-      "uninstallDisplayName": "PropManagerr Local Desktop"
-    }
+      "shortcutName": "PropManagerr Local SQLite",
+      "uninstallDisplayName": "PropManagerr Local SQLite"
+    },
+    "artifactName": "PropManagerr Local SQLite Setup ${version}.${ext}"
   }
 }
-
