@@ -182,7 +182,7 @@ const serverApi = {
       body: JSON.stringify(account),
     }),
 
-  createProperty: (property: PropertyPayload) =>
+  deleteAdminAccount: (id: string) => request(`/admin/accounts/${id}`, { method: 'DELETE', }), createProperty: (property: PropertyPayload) =>
     request('/properties', {
       method: 'POST',
       body: JSON.stringify(property),

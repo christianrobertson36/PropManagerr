@@ -122,7 +122,7 @@ ipcMain.handle('local:admin-accounts:list', () => localDb.listAdminAccounts());
 ipcMain.handle('local:admin-accounts:create', (_event, account) => localDb.createAdminAccount(account));
 ipcMain.handle('local:admin-accounts:update', (_event, { id, account }) => localDb.updateAdminAccount(id, account));
 
-app.whenReady().then(() => {
+ipcMain.handle('local:admin-accounts:delete', (_event, id) => localDb.deleteAdminAccount(id)); app.whenReady().then(() => {
   buildMenu();
   createMainWindow();
 

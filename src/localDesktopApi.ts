@@ -87,7 +87,7 @@ export const localDesktopApi = {
   updateAdminAccount: (id: string, account: AdminAccountPayload) =>
     localBridge().updateAdminAccount(id, account),
 
-  createDocument: (document: DocumentPayload) => localBridge().createDocument(document),
+  deleteAdminAccount: (id: string) => localBridge().deleteAdminAccount(id), createDocument: (document: DocumentPayload) => localBridge().createDocument(document),
   updateDocument: (id: string, document: DocumentPayload) => localBridge().updateDocument(id, document),
   deleteDocument: (id: string) => localBridge().deleteDocument(id),
 

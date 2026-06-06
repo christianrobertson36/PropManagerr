@@ -1429,9 +1429,7 @@ function Admin({ data }: { data: DashboardData; refresh: () => Promise<void> }) 
     else await api.createAdminAccount(payload);
     reset();
     await loadAccounts();
-  }
-
-  return (
+  } async function remove(account: AdminAccount) { if (!window.confirm(`Delete login account ${account.email}?`)) return; try { await api.deleteAdminAccount(account.id); if (editing?.id === account.id) reset(); await loadAccounts(); } catch (err) { window.alert(err instanceof Error ? err.message : 'Could not delete account'); } } return (
     <CrudLayout title={editing ? 'Edit login account' : 'Add login account'} onSubmit={submit} onCancel={reset} editing={Boolean(editing)}>
       <Input label="Name" value={fieldValue(form.name)} onChange={value => setForm({ ...form, name: value })} required />
       <Input label="Email" type="email" value={fieldValue(form.email)} onChange={value => setForm({ ...form, email: value })} required />
@@ -1453,7 +1451,7 @@ function Admin({ data }: { data: DashboardData; refresh: () => Promise<void> }) 
           account.role,
           account.tenant?.name || '-',
           account.active ? 'Yes' : 'No',
-          <Button variant="secondary" onClick={() => startEdit(account)}>Edit</Button>,
+          <div className="flex gap-2"> <Button variant="secondary" onClick={() => startEdit(account)}>Edit</Button> <Button variant="danger" onClick={() => remove(account)}>Delete</Button> </div>,
         ])}
       />
     </CrudLayout>

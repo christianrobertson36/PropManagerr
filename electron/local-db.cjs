@@ -711,7 +711,7 @@ function updateAdminAccount(accountId, account) {
   return listAdminAccounts().find((accountRow) => accountRow.id === accountId);
 }
 
-module.exports = {
+function deleteAdminAccount(accountId) { const existing = db.prepare('SELECT id, name, email, role, tenant_id, active, created_at, updated_at FROM users WHERE id=?').get(accountId); if (!existing) throw new Error('Account not found'); if (existing.role === 'admin' && existing.active) { const activeAdminCount = db.prepare("SELECT COUNT(*) AS count FROM users WHERE role='admin' AND active=1").get().count; if (activeAdminCount <= 1) throw new Error('Cannot delete the last active admin account'); } db.prepare('DELETE FROM users WHERE id=?').run(accountId); return { ...existing, active: Boolean(existing.active), tenant: tenantFor(existing.tenant_id, all('tenants')) }; } module.exports = {
   openDatabase,
   login,
   dashboard,
@@ -738,5 +738,5 @@ module.exports = {
   deleteDocument,
   listAdminAccounts,
   createAdminAccount,
-  updateAdminAccount,
+  updateAdminAccount, deleteAdminAccount,
 };

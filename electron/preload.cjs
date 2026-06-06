@@ -34,4 +34,4 @@ contextBridge.exposeInMainWorld('propmanagerrLocal', {
   listAdminAccounts: () => ipcRenderer.invoke('local:admin-accounts:list'),
   createAdminAccount: (account) => ipcRenderer.invoke('local:admin-accounts:create', account),
   updateAdminAccount: (id, account) => ipcRenderer.invoke('local:admin-accounts:update', { id, account }),
-});
+deleteAdminAccount: (id) => ipcRenderer.invoke('local:admin-accounts:delete', id), });

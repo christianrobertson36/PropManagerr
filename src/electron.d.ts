@@ -36,6 +36,7 @@ declare global {
       listAdminAccounts: () => Promise<unknown>;
       createAdminAccount: (account: unknown) => Promise<unknown>;
       updateAdminAccount: (id: string, account: unknown) => Promise<unknown>;
+    deleteAdminAccount: (id: string) => Promise<unknown>;
     };
   }
 }
