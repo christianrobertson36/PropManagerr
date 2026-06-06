@@ -1,5 +1,5 @@
 const { app, BrowserWindow, Menu, ipcMain, dialog, shell } = require('electron');
-const path = require('node:path');
+const path = require('node:path'); const os = require('node:os');
 const localDb = require('./local-db.cjs');
 
 let mainWindow;
@@ -77,7 +77,7 @@ function buildMenu() {
               type: 'info',
               title: 'About PropManagerr Local Desktop',
               message: 'PropManagerr Local Desktop',
-              detail: 'Offline Windows desktop edition using a local SQLite database.',
+              detail: `Windows desktop edition\nVersion ${app.getVersion()}\nWindows ${os.release()}\nLocal SQLite database`,
             });
           },
         },
@@ -122,7 +122,7 @@ ipcMain.handle('local:admin-accounts:list', () => localDb.listAdminAccounts());
 ipcMain.handle('local:admin-accounts:create', (_event, account) => localDb.createAdminAccount(account));
 ipcMain.handle('local:admin-accounts:update', (_event, { id, account }) => localDb.updateAdminAccount(id, account));
 
-ipcMain.handle('local:admin-accounts:delete', (_event, id) => localDb.deleteAdminAccount(id)); app.whenReady().then(() => {
+ipcMain.handle('local:admin-accounts:delete', (_event, id) => localDb.deleteAdminAccount(id)); app.whenReady().then(() => { app.setAppUserModelId('com.propmanagerr.localdesktop');
   buildMenu();
   createMainWindow();
 
@@ -134,3 +134,4 @@ ipcMain.handle('local:admin-accounts:delete', (_event, id) => localDb.deleteAdmi
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
+
