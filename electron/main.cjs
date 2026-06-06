@@ -51,7 +51,11 @@ function buildMenu() {
         { label: 'Local Database Status', click: () => openLocalStatus() },
         { type: 'separator' },
         { label: 'Reload', accelerator: 'Ctrl+R', click: () => mainWindow?.reload() },
-        { label: 'Open Developer Tools', accelerator: 'Ctrl+Shift+I', click: () => mainWindow?.webContents.openDevTools() },
+        {
+          label: 'Open Developer Tools',
+          accelerator: 'Ctrl+Shift+I',
+          click: () => mainWindow?.webContents.openDevTools(),
+        },
         { type: 'separator' },
         { label: 'Exit', role: 'quit' },
       ],
@@ -82,7 +86,9 @@ ipcMain.handle('local:login', (_event, { email, password }) => localDb.login(ema
 ipcMain.handle('local:dashboard', (_event, user) => localDb.dashboard(user));
 ipcMain.handle('local:compliance-updates', () => localDb.complianceUpdates());
 ipcMain.handle('local:properties:create', (_event, property) => localDb.createProperty(property));
-ipcMain.handle('local:properties:update', (_event, { id, property }) => localDb.updateProperty(id, property));
+ipcMain.handle('local:properties:update', (_event, { id, property }) =>
+  localDb.updateProperty(id, property)
+);
 ipcMain.handle('local:properties:delete', (_event, id) => localDb.deleteProperty(id));
 
 app.whenReady().then(() => {
