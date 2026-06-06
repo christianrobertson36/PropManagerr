@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { initDatabase } from './initDb.js';
 import 'dotenv/config';
 import fs from 'fs/promises';
@@ -91,6 +92,244 @@ const adminCrud = (path, table, fields, name) => {
     sendOneOr404(res, rows, name);
   });
 };
+
+
+function normaliseLicenseKey(value) {
+  return String(value || '').trim().toUpperCase();
+}
+
+function generateLicenseKey() {
+  const parts = Array.from({ length: 4 }, () => crypto.randomBytes(2).toString('hex').toUpperCase());
+  return `PMLOCAL-${parts.join('-')}`;
+}
+
+function generateActivationToken() {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+async function ensureLicenseTables() {
+  await query(`
+    create table if not exists license_keys (
+      id text primary key,
+      license_key text unique not null,
+      customer_email text,
+      customer_name text,
+      status text not null default 'active',
+      max_activations integer not null default 1,
+      expires_at timestamptz,
+      notes text,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    )
+  `);
+
+  await query(`
+    create table if not exists license_activations (
+      id text primary key,
+      license_key_id text not null references license_keys(id) on delete cascade,
+      device_id text not null,
+      device_name text,
+      app_version text,
+      activation_token text unique not null,
+      activated_at timestamptz not null default now(),
+      last_checked_at timestamptz not null default now(),
+      deactivated_at timestamptz,
+      unique (license_key_id, device_id)
+    )
+  `);
+}
+
+function publicLicenseRow(row) {
+  return {
+    license_key: row.license_key,
+    status: row.status,
+    customer_email: row.customer_email,
+    customer_name: row.customer_name,
+    max_activations: row.max_activations,
+    expires_at: row.expires_at,
+  };
+}
+
+async function findValidLicense(licenseKey) {
+  const key = normaliseLicenseKey(licenseKey);
+  if (!key) return { error: 'Licence key is required' };
+
+  const { rows } = await query('select * from license_keys where license_key=$1 limit 1', [key]);
+  const license = rows[0];
+
+  if (!license) return { error: 'Licence key was not found' };
+  if (license.status !== 'active') return { error: 'Licence key is not active' };
+  if (license.expires_at && new Date(license.expires_at).getTime() < Date.now()) {
+    return { error: 'Licence key has expired' };
+  }
+
+  return { license };
+}
+
+ensureLicenseTables().catch(error => {
+  console.error('Failed to initialise licence tables', error);
+});
+
+app.get('/admin/licenses', requireAuth, requireAdmin, async (_req, res) => {
+  const { rows } = await query(`
+    select
+      lk.*,
+      count(la.id) filter (where la.deactivated_at is null) as active_activations
+    from license_keys lk
+    left join license_activations la on la.license_key_id = lk.id
+    group by lk.id
+    order by lk.created_at desc
+  `);
+
+  res.json(rows);
+});
+
+app.post('/admin/licenses', requireAuth, requireAdmin, async (req, res) => {
+  const {
+    license_key,
+    customer_email = null,
+    customer_name = null,
+    max_activations = 1,
+    expires_at = null,
+    notes = null,
+  } = req.body || {};
+
+  const key = normaliseLicenseKey(license_key || generateLicenseKey());
+  const maxActivations = Math.max(1, Number(max_activations || 1));
+
+  const { rows } = await query(
+    `insert into license_keys
+      (id, license_key, customer_email, customer_name, max_activations, expires_at, notes)
+     values ($1,$2,$3,$4,$5,$6,$7)
+     returning *`,
+    [crypto.randomUUID(), key, customer_email, customer_name, maxActivations, expires_at || null, notes]
+  );
+
+  res.status(201).json(rows[0]);
+});
+
+app.patch('/admin/licenses/:id', requireAuth, requireAdmin, async (req, res) => {
+  const { status, customer_email, customer_name, max_activations, expires_at, notes } = req.body || {};
+  const fields = [];
+  const values = [];
+
+  for (const [field, value] of Object.entries({ status, customer_email, customer_name, max_activations, expires_at, notes })) {
+    if (value !== undefined) {
+      values.push(field === 'max_activations' ? Math.max(1, Number(value || 1)) : value);
+      fields.push(`${field}=${values.length + 1}`);
+    }
+  }
+
+  if (fields.length === 0) return res.status(400).json({ error: 'No changes supplied' });
+
+  const { rows } = await query(
+    `update license_keys set ${fields.join(', ')}, updated_at=now() where id=$1 returning *`,
+    [req.params.id, ...values]
+  );
+
+  if (!rows[0]) return res.status(404).json({ error: 'Licence not found' });
+  res.json(rows[0]);
+});
+
+app.post('/license/activate', async (req, res) => {
+  const { license_key, device_id, device_name = null, app_version = null } = req.body || {};
+  const deviceId = String(device_id || '').trim();
+
+  if (!deviceId) return res.status(400).json({ ok: false, error: 'Device ID is required' });
+
+  const result = await findValidLicense(license_key);
+  if (result.error) return res.status(400).json({ ok: false, error: result.error });
+
+  const license = result.license;
+
+  const existing = await query(
+    `select * from license_activations
+     where license_key_id=$1 and device_id=$2 and deactivated_at is null
+     limit 1`,
+    [license.id, deviceId]
+  );
+
+  if (existing.rows[0]) {
+    const activationToken = generateActivationToken();
+    const { rows } = await query(
+      `update license_activations
+       set activation_token=$1, device_name=$2, app_version=$3, last_checked_at=now()
+       where id=$4
+       returning *`,
+      [activationToken, device_name, app_version, existing.rows[0].id]
+    );
+
+    return res.json({
+      ok: true,
+      activation_token: rows[0].activation_token,
+      license: publicLicenseRow(license),
+    });
+  }
+
+  const activeCount = await query(
+    'select count(*)::int as count from license_activations where license_key_id=$1 and deactivated_at is null',
+    [license.id]
+  );
+
+  if (activeCount.rows[0].count >= Number(license.max_activations || 1)) {
+    return res.status(403).json({ ok: false, error: 'Activation limit reached for this licence' });
+  }
+
+  const activationToken = generateActivationToken();
+  const { rows } = await query(
+    `insert into license_activations
+      (id, license_key_id, device_id, device_name, app_version, activation_token)
+     values ($1,$2,$3,$4,$5,$6)
+     returning *`,
+    [crypto.randomUUID(), license.id, deviceId, device_name, app_version, activationToken]
+  );
+
+  res.status(201).json({
+    ok: true,
+    activation_token: rows[0].activation_token,
+    license: publicLicenseRow(license),
+  });
+});
+
+app.post('/license/check', async (req, res) => {
+  const { license_key, device_id, activation_token, app_version = null } = req.body || {};
+  const key = normaliseLicenseKey(license_key);
+  const deviceId = String(device_id || '').trim();
+  const token = String(activation_token || '').trim();
+
+  if (!key || !deviceId || !token) {
+    return res.status(400).json({ ok: false, error: 'Licence key, device ID and activation token are required' });
+  }
+
+  const { rows } = await query(
+    `select lk.*, la.id as activation_id, la.deactivated_at
+     from license_keys lk
+     join license_activations la on la.license_key_id = lk.id
+     where lk.license_key=$1 and la.device_id=$2 and la.activation_token=$3
+     limit 1`,
+    [key, deviceId, token]
+  );
+
+  const row = rows[0];
+
+  if (!row) return res.status(401).json({ ok: false, error: 'Activation not found' });
+  if (row.deactivated_at) return res.status(403).json({ ok: false, error: 'Activation has been deactivated' });
+  if (row.status !== 'active') return res.status(403).json({ ok: false, error: 'Licence key is not active' });
+  if (row.expires_at && new Date(row.expires_at).getTime() < Date.now()) {
+    return res.status(403).json({ ok: false, error: 'Licence key has expired' });
+  }
+
+  await query(
+    'update license_activations set app_version=$1, last_checked_at=now() where id=$2',
+    [app_version, row.activation_id]
+  );
+
+  res.json({
+    ok: true,
+    license: publicLicenseRow(row),
+  });
+});
+
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
