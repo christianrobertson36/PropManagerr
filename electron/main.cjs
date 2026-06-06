@@ -4,6 +4,10 @@ const localDb = require('./local-db.cjs');
 
 let mainWindow;
 
+function appEntryPath() {
+  return path.join(__dirname, '..', 'dist', 'index.html');
+}
+
 function createMainWindow() {
   localDb.openDatabase(app);
 
@@ -22,7 +26,15 @@ function createMainWindow() {
     },
   });
 
-  mainWindow.loadFile(path.join(__dirname, 'local-status.html'));
+  mainWindow.loadFile(appEntryPath()).catch((error) => {
+    console.error('Failed to load local app:', error);
+    mainWindow.loadFile(path.join(__dirname, 'local-status.html'));
+  });
+}
+
+function openLocalApp() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.loadFile(appEntryPath()).catch(() => openLocalStatus());
 }
 
 function openLocalStatus() {
@@ -35,6 +47,7 @@ function buildMenu() {
     {
       label: 'PropManagerr Local',
       submenu: [
+        { label: 'Open App', click: () => openLocalApp() },
         { label: 'Local Database Status', click: () => openLocalStatus() },
         { type: 'separator' },
         { label: 'Reload', accelerator: 'Ctrl+R', click: () => mainWindow?.reload() },
@@ -67,6 +80,10 @@ function buildMenu() {
 ipcMain.handle('local:health', () => localDb.health());
 ipcMain.handle('local:login', (_event, { email, password }) => localDb.login(email, password));
 ipcMain.handle('local:dashboard', (_event, user) => localDb.dashboard(user));
+ipcMain.handle('local:compliance-updates', () => localDb.complianceUpdates());
+ipcMain.handle('local:properties:create', (_event, property) => localDb.createProperty(property));
+ipcMain.handle('local:properties:update', (_event, { id, property }) => localDb.updateProperty(id, property));
+ipcMain.handle('local:properties:delete', (_event, id) => localDb.deleteProperty(id));
 
 app.whenReady().then(() => {
   buildMenu();

@@ -247,9 +247,72 @@ function health() {
   return { ok: true, database: paths.database, uploads: paths.uploads, counts };
 }
 
+function complianceUpdates() {
+  return db.prepare('SELECT * FROM compliance_updates ORDER BY last_checked DESC, title ASC').all();
+}
+
+function createProperty(property) {
+  const row = {
+    id: id('prop_'),
+    address: String(property.address || '').trim(),
+    city: String(property.city || '').trim(),
+    postcode: String(property.postcode || '').trim(),
+    status: property.status || 'active',
+    monthly_rent: Number(property.monthly_rent || 0),
+    bedrooms: Number(property.bedrooms || 0),
+    property_type: String(property.property_type || '').trim(),
+  };
+  if (!row.address) throw new Error('Property address is required');
+  db.prepare(`
+    INSERT INTO properties (id, address, city, postcode, status, monthly_rent, bedrooms, property_type)
+    VALUES (@id, @address, @city, @postcode, @status, @monthly_rent, @bedrooms, @property_type)
+  `).run(row);
+  return db.prepare('SELECT * FROM properties WHERE id=?').get(row.id);
+}
+
+function updateProperty(propertyId, property) {
+  const existing = db.prepare('SELECT * FROM properties WHERE id=?').get(propertyId);
+  if (!existing) throw new Error('Property not found');
+  const row = {
+    id: propertyId,
+    address: property.address !== undefined ? String(property.address || '').trim() : existing.address,
+    city: property.city !== undefined ? String(property.city || '').trim() : existing.city,
+    postcode: property.postcode !== undefined ? String(property.postcode || '').trim() : existing.postcode,
+    status: property.status !== undefined ? property.status : existing.status,
+    monthly_rent: property.monthly_rent !== undefined ? Number(property.monthly_rent || 0) : existing.monthly_rent,
+    bedrooms: property.bedrooms !== undefined ? Number(property.bedrooms || 0) : existing.bedrooms,
+    property_type: property.property_type !== undefined ? String(property.property_type || '').trim() : existing.property_type,
+  };
+  if (!row.address) throw new Error('Property address is required');
+  db.prepare(`
+    UPDATE properties
+    SET address=@address,
+        city=@city,
+        postcode=@postcode,
+        status=@status,
+        monthly_rent=@monthly_rent,
+        bedrooms=@bedrooms,
+        property_type=@property_type,
+        updated_at=CURRENT_TIMESTAMP
+    WHERE id=@id
+  `).run(row);
+  return db.prepare('SELECT * FROM properties WHERE id=?').get(propertyId);
+}
+
+function deleteProperty(propertyId) {
+  const existing = db.prepare('SELECT * FROM properties WHERE id=?').get(propertyId);
+  if (!existing) throw new Error('Property not found');
+  db.prepare('DELETE FROM properties WHERE id=?').run(propertyId);
+  return existing;
+}
+
 module.exports = {
   openDatabase,
   login,
   dashboard,
   health,
+  complianceUpdates,
+  createProperty,
+  updateProperty,
+  deleteProperty,
 };

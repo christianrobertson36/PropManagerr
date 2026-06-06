@@ -1,4 +1,5 @@
 import type { DashboardData, MaintenanceTicket, User } from './types';
+import { localDesktopApi } from './localDesktopApi';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 
@@ -130,7 +131,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return res.json();
 }
 
-export const api = {
+const serverApi = {
   documentFileUrl,
 
   login: (email: string, password: string) =>
@@ -276,3 +277,9 @@ export const api = {
     return res.json();
   },
 };
+
+function isLocalDesktopMode(): boolean {
+  return typeof window !== 'undefined' && Boolean(window.propmanagerrLocal);
+}
+
+export const api = isLocalDesktopMode() ? localDesktopApi : serverApi;
