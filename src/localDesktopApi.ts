@@ -71,9 +71,9 @@ export const localDesktopApi = {
   createAdminAccount: (_account: AdminAccountPayload) => comingSoon('Admin accounts'),
   updateAdminAccount: (_id: string, _account: AdminAccountPayload) => comingSoon('Admin accounts'),
 
-  createTenant: (_tenant: TenantPayload) => comingSoon('Tenant create'),
-  updateTenant: (_id: string, _tenant: TenantPayload) => comingSoon('Tenant update'),
-  deleteTenant: (_id: string) => comingSoon('Tenant delete'),
+  createTenant: (tenant: TenantPayload) => localBridge().createTenant(tenant),
+  updateTenant: (id: string, tenant: TenantPayload) => localBridge().updateTenant(id, tenant),
+  deleteTenant: (id: string) => localBridge().deleteTenant(id),
 
   updatePayment: (_id: string, _payment: RentPaymentUpdate) => comingSoon('Rent payment update'),
   deleteRentPayment: (_id: string) => comingSoon('Rent payment delete'),

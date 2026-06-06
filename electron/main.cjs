@@ -90,6 +90,9 @@ ipcMain.handle('local:properties:update', (_event, { id, property }) =>
   localDb.updateProperty(id, property)
 );
 ipcMain.handle('local:properties:delete', (_event, id) => localDb.deleteProperty(id));
+ipcMain.handle('local:tenants:create', (_event, tenant) => localDb.createTenant(tenant));
+ipcMain.handle('local:tenants:update', (_event, { id, tenant }) => localDb.updateTenant(id, tenant));
+ipcMain.handle('local:tenants:delete', (_event, id) => localDb.deleteTenant(id));
 
 app.whenReady().then(() => {
   buildMenu();

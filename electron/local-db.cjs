@@ -306,6 +306,88 @@ function deleteProperty(propertyId) {
   return existing;
 }
 
+function normaliseNullableId(value) {
+  const raw = value === undefined || value === null ? '' : String(value).trim();
+  return raw || null;
+}
+
+function createTenant(tenant) {
+  const propertyId = normaliseNullableId(tenant.property_id);
+  if (propertyId) {
+    const property = db.prepare('SELECT id FROM properties WHERE id=?').get(propertyId);
+    if (!property) throw new Error('Selected property was not found');
+  }
+
+  const row = {
+    id: id('ten_'),
+    property_id: propertyId,
+    name: String(tenant.name || '').trim(),
+    email: String(tenant.email || '').trim(),
+    phone: String(tenant.phone || '').trim(),
+    lease_start: tenant.lease_start || null,
+    lease_end: tenant.lease_end || null,
+    payment_status: tenant.payment_status || 'pending',
+  };
+
+  if (!row.name) throw new Error('Tenant name is required');
+
+  db.prepare(`
+    INSERT INTO tenants (id, property_id, name, email, phone, lease_start, lease_end, payment_status)
+    VALUES (@id, @property_id, @name, @email, @phone, @lease_start, @lease_end, @payment_status)
+  `).run(row);
+
+  return db.prepare('SELECT * FROM tenants WHERE id=?').get(row.id);
+}
+
+function updateTenant(tenantId, tenant) {
+  const existing = db.prepare('SELECT * FROM tenants WHERE id=?').get(tenantId);
+  if (!existing) throw new Error('Tenant not found');
+
+  const propertyId = tenant.property_id !== undefined
+    ? normaliseNullableId(tenant.property_id)
+    : existing.property_id || null;
+
+  if (propertyId) {
+    const property = db.prepare('SELECT id FROM properties WHERE id=?').get(propertyId);
+    if (!property) throw new Error('Selected property was not found');
+  }
+
+  const row = {
+    id: tenantId,
+    property_id: propertyId,
+    name: tenant.name !== undefined ? String(tenant.name || '').trim() : existing.name,
+    email: tenant.email !== undefined ? String(tenant.email || '').trim() : existing.email,
+    phone: tenant.phone !== undefined ? String(tenant.phone || '').trim() : existing.phone,
+    lease_start: tenant.lease_start !== undefined ? tenant.lease_start || null : existing.lease_start,
+    lease_end: tenant.lease_end !== undefined ? tenant.lease_end || null : existing.lease_end,
+    payment_status: tenant.payment_status !== undefined ? tenant.payment_status || 'pending' : existing.payment_status,
+  };
+
+  if (!row.name) throw new Error('Tenant name is required');
+
+  db.prepare(`
+    UPDATE tenants
+    SET property_id=@property_id,
+        name=@name,
+        email=@email,
+        phone=@phone,
+        lease_start=@lease_start,
+        lease_end=@lease_end,
+        payment_status=@payment_status,
+        updated_at=CURRENT_TIMESTAMP
+    WHERE id=@id
+  `).run(row);
+
+  return db.prepare('SELECT * FROM tenants WHERE id=?').get(tenantId);
+}
+
+function deleteTenant(tenantId) {
+  const existing = db.prepare('SELECT * FROM tenants WHERE id=?').get(tenantId);
+  if (!existing) throw new Error('Tenant not found');
+  db.prepare('DELETE FROM tenants WHERE id=?').run(tenantId);
+  return existing;
+}
+
 module.exports = {
   openDatabase,
   login,
@@ -315,4 +397,7 @@ module.exports = {
   createProperty,
   updateProperty,
   deleteProperty,
+  createTenant,
+  updateTenant,
+  deleteTenant,
 };

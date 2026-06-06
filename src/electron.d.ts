@@ -10,6 +10,9 @@ declare global {
       createProperty: (property: unknown) => Promise<unknown>;
       updateProperty: (id: string, property: unknown) => Promise<unknown>;
       deleteProperty: (id: string) => Promise<unknown>;
+      createTenant: (tenant: unknown) => Promise<unknown>;
+      updateTenant: (id: string, tenant: unknown) => Promise<unknown>;
+      deleteTenant: (id: string) => Promise<unknown>;
     };
   }
 }
