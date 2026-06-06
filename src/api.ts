@@ -17,6 +17,11 @@ export type RentPaymentUpdate = {
   notes?: string;
 };
 
+export type RentPaymentPayload = RentPaymentUpdate & {
+  tenant_id?: string | null;
+  property_id?: string | null;
+};
+
 export type PropertyPayload = {
   address?: string;
   city?: string;
@@ -220,6 +225,12 @@ const serverApi = {
   deleteRentPayment: (id: string) =>
     request(`/rent-payments/${id}`, {
       method: 'DELETE',
+    }),
+
+  createPayment: (payment: RentPaymentPayload) =>
+    request('/rent-payments', {
+      method: 'POST',
+      body: JSON.stringify(payment),
     }),
 
   createExpense: (expense: ExpensePayload) =>

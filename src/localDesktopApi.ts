@@ -9,6 +9,7 @@ import type {
   LoginResponse,
   MaintenanceTicketPayload,
   PropertyPayload,
+  RentPaymentPayload,
   RentPaymentUpdate,
   TenantPayload,
 } from './api';
@@ -62,6 +63,14 @@ export const localDesktopApi = {
   updateProperty: (id: string, property: PropertyPayload) => localBridge().updateProperty(id, property),
   deleteProperty: (id: string) => localBridge().deleteProperty(id),
 
+  createTenant: (tenant: TenantPayload) => localBridge().createTenant(tenant),
+  updateTenant: (id: string, tenant: TenantPayload) => localBridge().updateTenant(id, tenant),
+  deleteTenant: (id: string) => localBridge().deleteTenant(id),
+
+  createPayment: (payment: RentPaymentPayload) => localBridge().createPayment(payment),
+  updatePayment: (id: string, payment: RentPaymentUpdate) => localBridge().updatePayment(id, payment),
+  deleteRentPayment: (id: string) => localBridge().deleteRentPayment(id),
+
   createTicket: (_ticket: Pick<MaintenanceTicket, 'title' | 'description' | 'property_id' | 'urgency'>) =>
     comingSoon('Repair reporting'),
   updateMaintenanceTicket: (_id: string, _ticket: MaintenanceTicketPayload) => comingSoon('Repair editing'),
@@ -70,13 +79,6 @@ export const localDesktopApi = {
   listAdminAccounts: async (): Promise<AdminAccount[]> => [],
   createAdminAccount: (_account: AdminAccountPayload) => comingSoon('Admin accounts'),
   updateAdminAccount: (_id: string, _account: AdminAccountPayload) => comingSoon('Admin accounts'),
-
-  createTenant: (tenant: TenantPayload) => localBridge().createTenant(tenant),
-  updateTenant: (id: string, tenant: TenantPayload) => localBridge().updateTenant(id, tenant),
-  deleteTenant: (id: string) => localBridge().deleteTenant(id),
-
-  updatePayment: (_id: string, _payment: RentPaymentUpdate) => comingSoon('Rent payment update'),
-  deleteRentPayment: (_id: string) => comingSoon('Rent payment delete'),
 
   createExpense: (_expense: ExpensePayload) => comingSoon('Expense create'),
   updateExpense: (_id: string, _expense: ExpensePayload) => comingSoon('Expense update'),

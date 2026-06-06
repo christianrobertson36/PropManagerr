@@ -23,6 +23,7 @@ import type {
   DocumentPayload,
   ExpensePayload,
   PropertyPayload,
+  RentPaymentPayload,
   RentPaymentUpdate,
   TenantPayload,
 } from './api';
@@ -647,7 +648,18 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
 
 function Rent({ data, refresh, user }: { data: DashboardData; refresh: () => Promise<void>; user: User }) {
   const [editing, setEditing] = useState<RentPayment | null>(null);
+  const [creating, setCreating] = useState(false);
   const [form, setForm] = useState<RentPaymentUpdate>({ amount: 0, due_date: '', paid_date: null, status: 'pending', payment_method: '', notes: '' });
+  const [createForm, setCreateForm] = useState<RentPaymentPayload>({
+    tenant_id: '',
+    property_id: '',
+    amount: 0,
+    due_date: new Date().toISOString().slice(0, 10),
+    paid_date: null,
+    status: 'pending',
+    payment_method: '',
+    notes: '',
+  });
   const rentPayments = user.role === 'tenant'
     ? data.rentPayments.filter(payment => payment.tenant_id === user.tenant_id)
     : data.rentPayments;

@@ -85,14 +85,22 @@ ipcMain.handle('local:health', () => localDb.health());
 ipcMain.handle('local:login', (_event, { email, password }) => localDb.login(email, password));
 ipcMain.handle('local:dashboard', (_event, user) => localDb.dashboard(user));
 ipcMain.handle('local:compliance-updates', () => localDb.complianceUpdates());
+
 ipcMain.handle('local:properties:create', (_event, property) => localDb.createProperty(property));
 ipcMain.handle('local:properties:update', (_event, { id, property }) =>
   localDb.updateProperty(id, property)
 );
 ipcMain.handle('local:properties:delete', (_event, id) => localDb.deleteProperty(id));
+
 ipcMain.handle('local:tenants:create', (_event, tenant) => localDb.createTenant(tenant));
 ipcMain.handle('local:tenants:update', (_event, { id, tenant }) => localDb.updateTenant(id, tenant));
 ipcMain.handle('local:tenants:delete', (_event, id) => localDb.deleteTenant(id));
+
+ipcMain.handle('local:rent-payments:create', (_event, payment) => localDb.createRentPayment(payment));
+ipcMain.handle('local:rent-payments:update', (_event, { id, payment }) =>
+  localDb.updateRentPayment(id, payment)
+);
+ipcMain.handle('local:rent-payments:delete', (_event, id) => localDb.deleteRentPayment(id));
 
 app.whenReady().then(() => {
   buildMenu();
