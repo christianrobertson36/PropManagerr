@@ -52,6 +52,35 @@ type PageConfig = {
 };
 
 const APP_VERSION = '1.0.1';
+const LICENSE_API_URL = 'http://192.168.1.177:8080/api';
+const LICENSE_KEY_STORAGE = 'pm_license_key';
+const LICENSE_TOKEN_STORAGE = 'pm_license_activation_token';
+const LICENSE_DEVICE_STORAGE = 'pm_license_device_id';
+
+function desktopDeviceId() {
+  const existing = localStorage.getItem(LICENSE_DEVICE_STORAGE);
+  if (existing) return existing;
+  const next = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `device-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  localStorage.setItem(LICENSE_DEVICE_STORAGE, next);
+  return next;
+}
+
+async function postLicense<T>(path: string, body: unknown): Promise<T> {
+  const response = await fetch(`${LICENSE_API_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.ok === false) {
+    throw new Error(data.error || `Licence server returned HTTP ${response.status}`);
+  }
+
+  return data as T;
+}
 
 const emptyDashboard: DashboardData = {
   properties: [],
@@ -234,6 +263,55 @@ function Login({ onLogin }: { onLogin: (user: User) => void }) {
             {loading ? 'Signing in...' : 'Sign in'}
           </Button>
         </div>
+      </form>
+    </main>
+  );
+}
+
+
+function LicenseActivation({
+  onActivate,
+  error,
+  loading,
+}: {
+  onActivate: (licenseKey: string) => Promise<void>;
+  error: string;
+  loading: boolean;
+}) {
+  const [licenseKey, setLicenseKey] = useState(localStorage.getItem(LICENSE_KEY_STORAGE) || '');
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    await onActivate(licenseKey);
+  }
+
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-slate-950 px-4">
+      <form onSubmit={submit} className="w-full max-w-md rounded-2xl bg-white p-8 shadow-xl">
+        <div className="mb-6">
+          <p className="text-sm font-semibold uppercase tracking-wide text-emerald-600">PropManagerr Local SQLite</p>
+          <h1 className="mt-2 text-2xl font-bold text-slate-900">Activate your licence</h1>
+          <p className="mt-2 text-sm text-slate-500">
+            This copy needs an online licence check before it can be used.
+          </p>
+        </div>
+
+        {error && (
+          <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+            {error}
+          </div>
+        )}
+
+        <div className="space-y-4">
+          <Input label="Licence key" value={licenseKey} onChange={setLicenseKey} required />
+          <Button type="submit" disabled={loading || !licenseKey.trim()}>
+            {loading ? 'Activating...' : 'Activate licence'}
+          </Button>
+        </div>
+
+        <p className="mt-6 text-xs text-slate-500">
+          Device ID: {desktopDeviceId()}
+        </p>
       </form>
     </main>
   );
@@ -1620,9 +1698,57 @@ export default function App() {
   const [data, setData] = useState<DashboardData>(emptyDashboard);
   const [page, setPage] = useState<Page>('dashboard');
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(''); const [checkingUpdates, setCheckingUpdates] = useState(false); const [updateStatus, setUpdateStatus] = useState(''); const [darkMode, setDarkMode] = useState(() => localStorage.getItem('pm_theme') === 'dark');
+  const [error, setError] = useState(''); const [checkingUpdates, setCheckingUpdates] = useState(false); const [updateStatus, setUpdateStatus] = useState(''); const [darkMode, setDarkMode] = useState(() => localStorage.getItem('pm_theme') === 'dark'); const [licenseValid, setLicenseValid] = useState(false); const [licenseLoading, setLicenseLoading] = useState(false); const [licenseError, setLicenseError] = useState('');
 
   const visiblePages = pageConfig.filter(item => !item.adminOnly || user?.role === 'admin');
+
+  async function checkStoredLicense() {
+    const licenseKey = localStorage.getItem(LICENSE_KEY_STORAGE);
+    const activationToken = localStorage.getItem(LICENSE_TOKEN_STORAGE);
+
+    if (!licenseKey || !activationToken) {
+      setLicenseError('Enter your licence key to activate this desktop app.');
+      return false;
+    }
+
+    try {
+      await postLicense('/license/check', {
+        license_key: licenseKey,
+        device_id: desktopDeviceId(),
+        activation_token: activationToken,
+        app_version: APP_VERSION,
+      });
+      setLicenseError('');
+      return true;
+    } catch (err) {
+      setLicenseError(err instanceof Error ? err.message : 'Licence check failed.');
+      localStorage.removeItem(LICENSE_TOKEN_STORAGE);
+      return false;
+    }
+  }
+
+  async function activateLicense(licenseKey: string) {
+    setLicenseLoading(true);
+    setLicenseError('');
+
+    try {
+      const result = await postLicense<{ ok: boolean; activation_token: string }>('/license/activate', {
+        license_key: licenseKey.trim(),
+        device_id: desktopDeviceId(),
+        device_name: 'Windows desktop',
+        app_version: APP_VERSION,
+      });
+
+      localStorage.setItem(LICENSE_KEY_STORAGE, licenseKey.trim().toUpperCase());
+      localStorage.setItem(LICENSE_TOKEN_STORAGE, result.activation_token);
+      setLicenseValid(true);
+      setLicenseError('');
+    } catch (err) {
+      setLicenseError(err instanceof Error ? err.message : 'Licence activation failed.');
+    } finally {
+      setLicenseLoading(false);
+    }
+  }
 
   async function refresh() {
     const dashboard = await api.dashboard();
@@ -1631,6 +1757,14 @@ export default function App() {
 
   useEffect(() => {
     async function boot() {
+      const licensed = await checkStoredLicense();
+      setLicenseValid(licensed);
+
+      if (!licensed) {
+        setLoading(false);
+        return;
+      }
+
       const token = localStorage.getItem('pm_token');
       if (!token) {
         setLoading(false);
@@ -1715,6 +1849,10 @@ export default function App() {
 
   if (loading) {
     return <main className="flex min-h-screen items-center justify-center bg-slate-100 text-slate-700">Loading PropManagerr...</main>;
+  }
+
+  if (!licenseValid) {
+    return <LicenseActivation onActivate={activateLicense} error={licenseError} loading={licenseLoading} />;
   }
 
   if (!user) {
