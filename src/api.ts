@@ -89,6 +89,28 @@ export type AdminAccountPayload = {
   active?: boolean;
 };
 
+export type LicenceKey = {
+  id: string;
+  license_key: string;
+  customer_email: string | null;
+  customer_name: string | null;
+  status: string;
+  max_activations: number;
+  active_activations?: number | string;
+  expires_at: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type LicencePayload = {
+  customer_email?: string | null;
+  customer_name?: string | null;
+  max_activations?: number;
+  expires_at?: string | null;
+  notes?: string | null;
+};
+
 export type ComplianceUpdate = {
   id: string;
   title: string;
@@ -174,6 +196,20 @@ export const api = {
     request<AdminAccount>(`/admin/accounts/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(account),
+    }),
+
+  listLicences: () => request<LicenceKey[]>('/admin/licenses'),
+
+  createLicence: (licence: LicencePayload) =>
+    request<LicenceKey>('/admin/licenses', {
+      method: 'POST',
+      body: JSON.stringify(licence),
+    }),
+
+  updateLicence: (id: string, licence: Partial<LicencePayload & { status: string }>) =>
+    request<LicenceKey>(`/admin/licenses/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(licence),
     }),
 
   createProperty: (property: PropertyPayload) =>

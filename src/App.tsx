@@ -19,6 +19,8 @@ import { TenantPortal } from './pages/TenantPortalPage';
 import type {
   AdminAccount,
   AdminAccountPayload,
+  LicenceKey,
+  LicencePayload,
   ComplianceUpdate,
   DocumentPayload,
   ExpensePayload,
@@ -1385,6 +1387,92 @@ function Expenses({ data, refresh }: { data: DashboardData; refresh: () => Promi
   );
 }
 
+function LicenceManagement() {
+  const [licences, setLicences] = useState<LicenceKey[]>([]);
+  const [form, setForm] = useState<LicencePayload>({ customer_email: '', customer_name: '', max_activations: 1, expires_at: '', notes: '' });
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState('');
+
+  async function loadLicences() {
+    const rows = await api.listLicences();
+    setLicences(rows);
+  }
+
+  useEffect(() => {
+    loadLicences().catch(err => setError(err instanceof Error ? err.message : 'Could not load licences'));
+  }, []);
+
+  async function createLicence(event: FormEvent) {
+    event.preventDefault();
+    setCreating(true);
+    setError('');
+
+    try {
+      await api.createLicence({
+        customer_email: form.customer_email || null,
+        customer_name: form.customer_name || null,
+        max_activations: Math.max(1, Number(form.max_activations || 1)),
+        expires_at: form.expires_at || null,
+        notes: form.notes || null,
+      });
+      setForm({ customer_email: '', customer_name: '', max_activations: 1, expires_at: '', notes: '' });
+      await loadLicences();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not create licence');
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function setStatus(licence: LicenceKey, status: 'active' | 'revoked') {
+    try {
+      await api.updateLicence(licence.id, { status });
+      await loadLicences();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Could not update licence');
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <Card title="Licence management">
+        <form onSubmit={createLicence} className="grid gap-4 md:grid-cols-3">
+          <Input label="Customer name" value={fieldValue(form.customer_name)} onChange={value => setForm({ ...form, customer_name: value })} />
+          <Input label="Customer email" type="email" value={fieldValue(form.customer_email)} onChange={value => setForm({ ...form, customer_email: value })} />
+          <Input label="Max activations" type="number" value={String(form.max_activations || 1)} onChange={value => setForm({ ...form, max_activations: Number(value || 1) })} />
+          <Input label="Expires at (optional)" type="date" value={fieldValue(form.expires_at)} onChange={value => setForm({ ...form, expires_at: value || null })} />
+          <Input label="Notes" value={fieldValue(form.notes)} onChange={value => setForm({ ...form, notes: value })} />
+          <div className="flex items-end">
+            <Button type="submit" disabled={creating}>{creating ? 'Creating...' : 'Create licence'}</Button>
+          </div>
+        </form>
+        {error && <p className="mt-3 text-sm text-rose-600">{error}</p>}
+      </Card>
+
+      <Table
+        columns={['Licence key', 'Customer', 'Status', 'Activations', 'Expires', 'Actions']}
+        rows={licences.map(licence => [
+          <code className="rounded bg-slate-100 px-2 py-1 text-xs">{licence.license_key}</code>,
+          <div>
+            <div>{licence.customer_name || '-'}</div>
+            <div className="text-xs text-slate-500">{licence.customer_email || '-'}</div>
+          </div>,
+          licence.status,
+          `${licence.active_activations ?? 0} / ${licence.max_activations}`,
+          licence.expires_at ? dateOnly(licence.expires_at) : '-',
+          <div className="flex gap-2">
+            {licence.status === 'active' ? (
+              <Button variant="secondary" onClick={() => setStatus(licence, 'revoked')}>Revoke</Button>
+            ) : (
+              <Button variant="secondary" onClick={() => setStatus(licence, 'active')}>Reactivate</Button>
+            )}
+          </div>,
+        ])}
+      />
+    </div>
+  );
+}
+
 function Admin({ data }: { data: DashboardData; refresh: () => Promise<void> }) {
   const [accounts, setAccounts] = useState<AdminAccount[]>([]);
   const [editing, setEditing] = useState<AdminAccount | null>(null);
@@ -1420,31 +1508,35 @@ function Admin({ data }: { data: DashboardData; refresh: () => Promise<void> }) 
   }
 
   return (
-    <CrudLayout title={editing ? 'Edit login account' : 'Add login account'} onSubmit={submit} onCancel={reset} editing={Boolean(editing)}>
-      <Input label="Name" value={fieldValue(form.name)} onChange={value => setForm({ ...form, name: value })} required />
-      <Input label="Email" type="email" value={fieldValue(form.email)} onChange={value => setForm({ ...form, email: value })} required />
-      <Input label={editing ? 'New password (leave blank to keep)' : 'Password'} type="password" value={fieldValue(form.password)} onChange={value => setForm({ ...form, password: value })} required={!editing} />
-      <Select<'admin' | 'tenant'> label="Role" value={form.role || 'tenant'} onChange={value => setForm({ ...form, role: value || 'tenant' })}>
-        <option value="admin">Admin</option>
-        <option value="tenant">Tenant</option>
-      </Select>
-      <Select<string> label="Linked tenant" value={fieldValue(form.tenant_id)} onChange={value => setForm({ ...form, tenant_id: value || null })}>
-        <option value="">No tenant</option>
-        {data.tenants.map(tenant => <option key={tenant.id} value={tenant.id}>{tenant.name}</option>)}
-      </Select>
+    <div className="space-y-8">
+      <CrudLayout title={editing ? 'Edit login account' : 'Add login account'} onSubmit={submit} onCancel={reset} editing={Boolean(editing)}>
+        <Input label="Name" value={fieldValue(form.name)} onChange={value => setForm({ ...form, name: value })} required />
+        <Input label="Email" type="email" value={fieldValue(form.email)} onChange={value => setForm({ ...form, email: value })} required />
+        <Input label={editing ? 'New password (leave blank to keep)' : 'Password'} type="password" value={fieldValue(form.password)} onChange={value => setForm({ ...form, password: value })} required={!editing} />
+        <Select<'admin' | 'tenant'> label="Role" value={form.role || 'tenant'} onChange={value => setForm({ ...form, role: value || 'tenant' })}>
+          <option value="admin">Admin</option>
+          <option value="tenant">Tenant</option>
+        </Select>
+        <Select<string> label="Linked tenant" value={fieldValue(form.tenant_id)} onChange={value => setForm({ ...form, tenant_id: value || null })}>
+          <option value="">No tenant</option>
+          {data.tenants.map(tenant => <option key={tenant.id} value={tenant.id}>{tenant.name}</option>)}
+        </Select>
 
-      <Table
-        columns={['Name', 'Email', 'Role', 'Tenant', 'Active', 'Actions']}
-        rows={accounts.map(account => [
-          account.name,
-          account.email,
-          account.role,
-          account.tenant?.name || '-',
-          account.active ? 'Yes' : 'No',
-          <Button variant="secondary" onClick={() => startEdit(account)}>Edit</Button>,
-        ])}
-      />
-    </CrudLayout>
+        <Table
+          columns={['Name', 'Email', 'Role', 'Tenant', 'Active', 'Actions']}
+          rows={accounts.map(account => [
+            account.name,
+            account.email,
+            account.role,
+            account.tenant?.name || '-',
+            account.active ? 'Yes' : 'No',
+            <Button variant="secondary" onClick={() => startEdit(account)}>Edit</Button>,
+          ])}
+        />
+      </CrudLayout>
+
+      <LicenceManagement />
+    </div>
   );
 }
 
