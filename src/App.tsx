@@ -1620,7 +1620,7 @@ export default function App() {
   const [data, setData] = useState<DashboardData>(emptyDashboard);
   const [page, setPage] = useState<Page>('dashboard');
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(''); const [darkMode, setDarkMode] = useState(() => localStorage.getItem('pm_theme') === 'dark');
+  const [error, setError] = useState(''); const [checkingUpdates, setCheckingUpdates] = useState(false); const [updateStatus, setUpdateStatus] = useState(''); const [darkMode, setDarkMode] = useState(() => localStorage.getItem('pm_theme') === 'dark');
 
   const visiblePages = pageConfig.filter(item => !item.adminOnly || user?.role === 'admin');
 
@@ -1666,6 +1666,44 @@ export default function App() {
       localStorage.setItem('pm_theme', next ? 'dark' : 'light');
       return next;
     });
+  }
+
+  async function checkForUpdates() {
+    setCheckingUpdates(true);
+    setUpdateStatus('');
+
+    const releasesUrl = 'https://github.com/christianrobertson36/PropManagerr/releases';
+
+    try {
+      const response = await fetch('https://api.github.com/repos/christianrobertson36/PropManagerr/releases/latest', {
+        headers: { Accept: 'application/vnd.github+json' },
+      });
+
+      if (response.status === 404) {
+        setUpdateStatus('No GitHub release has been published yet. Opening releases page.');
+        window.open(releasesUrl, '_blank', 'noopener,noreferrer');
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error(`GitHub returned HTTP ${response.status}`);
+      }
+
+      const release = await response.json();
+      const latestVersion = String(release.tag_name || release.name || '').replace(/^v/i, '');
+      const currentVersion = String(APP_VERSION || '').replace(/^v/i, '');
+
+      if (latestVersion && latestVersion !== currentVersion) {
+        setUpdateStatus(`Update available: ${latestVersion}. Opening GitHub release.`);
+        window.open(release.html_url || releasesUrl, '_blank', 'noopener,noreferrer');
+      } else {
+        setUpdateStatus(`You are on the current version: ${APP_VERSION}`);
+      }
+    } catch (err) {
+      setUpdateStatus(err instanceof Error ? `Could not check for updates: ${err.message}` : 'Could not check for updates.');
+    } finally {
+      setCheckingUpdates(false);
+    }
   }
 
   function logout() {
@@ -1729,13 +1767,16 @@ export default function App() {
               {darkMode ? 'Light mode' : 'Dark mode'}
             </span>
           </Button>
+          <Button variant="secondary" onClick={checkForUpdates} disabled={checkingUpdates}>
+            {checkingUpdates ? 'Checking...' : 'Check for updates'}
+          </Button>
           <Button variant="secondary" onClick={logout}>
             <span className="inline-flex items-center gap-2"><LogOut className="h-4 w-4" /> Sign out</span>
           </Button>
         </div>
         </div>
 
-        {error && (
+        {updateStatus && ( <div className="mb-4 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-700"> {updateStatus} </div> )} {error && (
           <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
             {error}
           </div>
