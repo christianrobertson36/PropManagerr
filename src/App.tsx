@@ -6,9 +6,9 @@ import {
   ClipboardList,
   FileText,
   Home,
-  LogOut,
+  LogOut, Moon,
   Receipt,
-  ShieldCheck,
+  ShieldCheck, Sun,
   Users,
   Wrench,
 } from 'lucide-react';
@@ -1620,7 +1620,7 @@ export default function App() {
   const [data, setData] = useState<DashboardData>(emptyDashboard);
   const [page, setPage] = useState<Page>('dashboard');
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(''); const [darkMode, setDarkMode] = useState(() => localStorage.getItem('pm_theme') === 'dark');
 
   const visiblePages = pageConfig.filter(item => !item.adminOnly || user?.role === 'admin');
 
@@ -1660,6 +1660,14 @@ export default function App() {
     await refresh();
   }
 
+  function toggleDarkMode() {
+    setDarkMode(current => {
+      const next = !current;
+      localStorage.setItem('pm_theme', next ? 'dark' : 'light');
+      return next;
+    });
+  }
+
   function logout() {
     localStorage.removeItem('pm_token');
     setUser(null);
@@ -1695,7 +1703,18 @@ export default function App() {
   }
 
   return (
-    <div className="flex min-h-screen bg-slate-100">
+    <div className={`flex min-h-screen bg-slate-100 ${darkMode ? 'pm-dark' : ''}`}>
+      <style>{`
+        .pm-dark { background: #0f172a; color: #e2e8f0; }
+        .pm-dark .bg-white, .pm-dark .bg-slate-50 { background-color: #1e293b !important; }
+        .pm-dark .bg-slate-100 { background-color: #0f172a !important; }
+        .pm-dark .border-slate-100, .pm-dark .border-slate-200, .pm-dark .border-slate-300 { border-color: #334155 !important; }
+        .pm-dark .text-slate-950, .pm-dark .text-slate-900, .pm-dark .text-slate-800, .pm-dark .text-slate-700 { color: #f8fafc !important; }
+        .pm-dark .text-slate-600, .pm-dark .text-slate-500 { color: #cbd5e1 !important; }
+        .pm-dark input, .pm-dark select, .pm-dark textarea { background: #0f172a !important; color: #f8fafc !important; border-color: #475569 !important; }
+        .pm-dark table thead { background: #0f172a; }
+        .pm-dark .hover\\:bg-emerald-50:hover { background-color: #064e3b !important; }
+      `}</style>
       <Sidebar visiblePages={visiblePages} currentPage={page} onPageChange={setPage} version={APP_VERSION} />
       <main className="flex-1 p-6">
         <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-center">
@@ -1703,9 +1722,17 @@ export default function App() {
             <h1 className="text-2xl font-bold text-slate-900">{visiblePages.find(item => item.page === page)?.label || 'Dashboard'}</h1>
             <p className="text-sm text-slate-500">Signed in as {user.name} ({user.role})</p>
           </div>
+          <div className="flex flex-wrap items-center gap-2">
+          <Button variant="secondary" onClick={toggleDarkMode}>
+            <span className="inline-flex items-center gap-2">
+              {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              {darkMode ? 'Light mode' : 'Dark mode'}
+            </span>
+          </Button>
           <Button variant="secondary" onClick={logout}>
             <span className="inline-flex items-center gap-2"><LogOut className="h-4 w-4" /> Sign out</span>
           </Button>
+        </div>
         </div>
 
         {error && (
