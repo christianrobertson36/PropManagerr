@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, dialog, shell } = require('electron');
 const path = require('node:path');
 const localDb = require('./local-db.cjs');
 
@@ -24,6 +24,13 @@ function createMainWindow() {
       contextIsolation: true,
       sandbox: false,
     },
+  });
+
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('file:///') || url.startsWith('http://') || url.startsWith('https://')) {
+      shell.openExternal(url);
+    }
+    return { action: 'deny' };
   });
 
   mainWindow.loadFile(appEntryPath()).catch((error) => {
@@ -87,9 +94,7 @@ ipcMain.handle('local:dashboard', (_event, user) => localDb.dashboard(user));
 ipcMain.handle('local:compliance-updates', () => localDb.complianceUpdates());
 
 ipcMain.handle('local:properties:create', (_event, property) => localDb.createProperty(property));
-ipcMain.handle('local:properties:update', (_event, { id, property }) =>
-  localDb.updateProperty(id, property)
-);
+ipcMain.handle('local:properties:update', (_event, { id, property }) => localDb.updateProperty(id, property));
 ipcMain.handle('local:properties:delete', (_event, id) => localDb.deleteProperty(id));
 
 ipcMain.handle('local:tenants:create', (_event, tenant) => localDb.createTenant(tenant));
@@ -97,10 +102,25 @@ ipcMain.handle('local:tenants:update', (_event, { id, tenant }) => localDb.updat
 ipcMain.handle('local:tenants:delete', (_event, id) => localDb.deleteTenant(id));
 
 ipcMain.handle('local:rent-payments:create', (_event, payment) => localDb.createRentPayment(payment));
-ipcMain.handle('local:rent-payments:update', (_event, { id, payment }) =>
-  localDb.updateRentPayment(id, payment)
-);
+ipcMain.handle('local:rent-payments:update', (_event, { id, payment }) => localDb.updateRentPayment(id, payment));
 ipcMain.handle('local:rent-payments:delete', (_event, id) => localDb.deleteRentPayment(id));
+
+ipcMain.handle('local:expenses:create', (_event, expense) => localDb.createExpense(expense));
+ipcMain.handle('local:expenses:update', (_event, { id, expense }) => localDb.updateExpense(id, expense));
+ipcMain.handle('local:expenses:delete', (_event, id) => localDb.deleteExpense(id));
+
+ipcMain.handle('local:maintenance:create', (_event, ticket) => localDb.createMaintenanceTicket(ticket));
+ipcMain.handle('local:maintenance:update', (_event, { id, ticket }) => localDb.updateMaintenanceTicket(id, ticket));
+ipcMain.handle('local:maintenance:delete', (_event, id) => localDb.deleteMaintenanceTicket(id));
+
+ipcMain.handle('local:documents:upload', (_event, payload) => localDb.uploadDocumentFile(payload));
+ipcMain.handle('local:documents:create', (_event, document) => localDb.createDocument(document));
+ipcMain.handle('local:documents:update', (_event, { id, document }) => localDb.updateDocument(id, document));
+ipcMain.handle('local:documents:delete', (_event, id) => localDb.deleteDocument(id));
+
+ipcMain.handle('local:admin-accounts:list', () => localDb.listAdminAccounts());
+ipcMain.handle('local:admin-accounts:create', (_event, account) => localDb.createAdminAccount(account));
+ipcMain.handle('local:admin-accounts:update', (_event, { id, account }) => localDb.updateAdminAccount(id, account));
 
 app.whenReady().then(() => {
   buildMenu();

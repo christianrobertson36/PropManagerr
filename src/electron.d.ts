@@ -19,6 +19,23 @@ declare global {
       createPayment: (payment: unknown) => Promise<unknown>;
       updatePayment: (id: string, payment: unknown) => Promise<unknown>;
       deleteRentPayment: (id: string) => Promise<unknown>;
+
+      createExpense: (expense: unknown) => Promise<unknown>;
+      updateExpense: (id: string, expense: unknown) => Promise<unknown>;
+      deleteExpense: (id: string) => Promise<unknown>;
+
+      createTicket: (ticket: unknown) => Promise<unknown>;
+      updateMaintenanceTicket: (id: string, ticket: unknown) => Promise<unknown>;
+      deleteMaintenanceTicket: (id: string) => Promise<unknown>;
+
+      uploadDocument: (payload: unknown) => Promise<unknown>;
+      createDocument: (document: unknown) => Promise<unknown>;
+      updateDocument: (id: string, document: unknown) => Promise<unknown>;
+      deleteDocument: (id: string) => Promise<unknown>;
+
+      listAdminAccounts: () => Promise<unknown>;
+      createAdminAccount: (account: unknown) => Promise<unknown>;
+      updateAdminAccount: (id: string, account: unknown) => Promise<unknown>;
     };
   }
 }

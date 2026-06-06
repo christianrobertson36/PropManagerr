@@ -9,10 +9,14 @@ import type {
   LoginResponse,
   MaintenanceTicketPayload,
   PropertyPayload,
-  RentPaymentPayload,
   RentPaymentUpdate,
   TenantPayload,
 } from './api';
+
+type RentPaymentPayload = RentPaymentUpdate & {
+  tenant_id?: string | null;
+  property_id?: string | null;
+};
 
 function localBridge() {
   if (!window.propmanagerrLocal) {
@@ -29,10 +33,6 @@ function currentUser(): User | null {
   } catch {
     return null;
   }
-}
-
-function comingSoon(feature: string): never {
-  throw new Error(`${feature} is not wired to the local desktop database yet.`);
 }
 
 export const localDesktopApi = {
@@ -71,21 +71,33 @@ export const localDesktopApi = {
   updatePayment: (id: string, payment: RentPaymentUpdate) => localBridge().updatePayment(id, payment),
   deleteRentPayment: (id: string) => localBridge().deleteRentPayment(id),
 
-  createTicket: (_ticket: Pick<MaintenanceTicket, 'title' | 'description' | 'property_id' | 'urgency'>) =>
-    comingSoon('Repair reporting'),
-  updateMaintenanceTicket: (_id: string, _ticket: MaintenanceTicketPayload) => comingSoon('Repair editing'),
-  deleteMaintenanceTicket: (_id: string) => comingSoon('Repair delete'),
+  createExpense: (expense: ExpensePayload) => localBridge().createExpense(expense),
+  updateExpense: (id: string, expense: ExpensePayload) => localBridge().updateExpense(id, expense),
+  deleteExpense: (id: string) => localBridge().deleteExpense(id),
 
-  listAdminAccounts: async (): Promise<AdminAccount[]> => [],
-  createAdminAccount: (_account: AdminAccountPayload) => comingSoon('Admin accounts'),
-  updateAdminAccount: (_id: string, _account: AdminAccountPayload) => comingSoon('Admin accounts'),
+  createTicket: (ticket: Pick<MaintenanceTicket, 'title' | 'description' | 'property_id' | 'urgency'>) =>
+    localBridge().createTicket(ticket),
+  updateMaintenanceTicket: (id: string, ticket: MaintenanceTicketPayload) =>
+    localBridge().updateMaintenanceTicket(id, ticket),
+  deleteMaintenanceTicket: (id: string) => localBridge().deleteMaintenanceTicket(id),
 
-  createExpense: (_expense: ExpensePayload) => comingSoon('Expense create'),
-  updateExpense: (_id: string, _expense: ExpensePayload) => comingSoon('Expense update'),
-  deleteExpense: (_id: string) => comingSoon('Expense delete'),
+  listAdminAccounts: async (): Promise<AdminAccount[]> =>
+    (await localBridge().listAdminAccounts()) as AdminAccount[],
+  createAdminAccount: (account: AdminAccountPayload) => localBridge().createAdminAccount(account),
+  updateAdminAccount: (id: string, account: AdminAccountPayload) =>
+    localBridge().updateAdminAccount(id, account),
 
-  createDocument: (_document: DocumentPayload) => comingSoon('Document create'),
-  updateDocument: (_id: string, _document: DocumentPayload) => comingSoon('Document update'),
-  deleteDocument: (_id: string) => comingSoon('Document delete'),
-  uploadDocument: async (_file: File): Promise<DocumentUploadResponse> => comingSoon('Document upload'),
+  createDocument: (document: DocumentPayload) => localBridge().createDocument(document),
+  updateDocument: (id: string, document: DocumentPayload) => localBridge().updateDocument(id, document),
+  deleteDocument: (id: string) => localBridge().deleteDocument(id),
+
+  uploadDocument: async (file: File): Promise<DocumentUploadResponse> => {
+    const buffer = await file.arrayBuffer();
+    return (await localBridge().uploadDocument({
+      name: file.name,
+      type: file.type,
+      size: file.size,
+      data: Array.from(new Uint8Array(buffer)),
+    })) as DocumentUploadResponse;
+  },
 };
