@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PropManagerr Local Database</title>
+  <style>
+    body { margin: 0; font-family: Arial, sans-serif; background: #0f172a; color: #e5e7eb; }
+    main { max-width: 920px; margin: 0 auto; padding: 48px 24px; }
+    .card { background: #111827; border: 1px solid #334155; border-radius: 18px; padding: 24px; margin: 18px 0; }
+    h1 { margin: 0 0 8px; font-size: 34px; }
+    h2 { margin-top: 0; }
+    button { background: #059669; color: white; border: 0; border-radius: 10px; padding: 12px 16px; cursor: pointer; font-weight: 700; }
+    input { display: block; width: 100%; box-sizing: border-box; padding: 12px; margin: 8px 0 14px; border-radius: 10px; border: 1px solid #475569; background: #020617; color: #e5e7eb; }
+    pre { white-space: pre-wrap; background: #020617; border: 1px solid #334155; padding: 16px; border-radius: 12px; overflow: auto; }
+    .muted { color: #94a3b8; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>PropManagerr Local Desktop</h1>
+    <p class="muted">This is the first local SQLite database test screen. It confirms the built-in database is created and the default local admin login works.</p>
+
+    <section class="card">
+      <h2>Database health</h2>
+      <button id="healthBtn">Check database</button>
+      <pre id="healthOutput">Not checked yet.</pre>
+    </section>
+
+    <section class="card">
+      <h2>Default local login</h2>
+      <label>Email</label>
+      <input id="email" value="admin@propmanager.local" />
+      <label>Password</label>
+      <input id="password" type="password" value="ChangeMe123!" />
+      <button id="loginBtn">Test login</button>
+      <pre id="loginOutput">Not tested yet.</pre>
+    </section>
+  </main>
+
+  <script>
+    const healthOutput = document.getElementById('healthOutput');
+    const loginOutput = document.getElementById('loginOutput');
+
+    document.getElementById('healthBtn').addEventListener('click', async () => {
+      try {
+        const result = await window.propmanagerrLocal.health();
+        healthOutput.textContent = JSON.stringify(result, null, 2);
+      } catch (error) {
+        healthOutput.textContent = error.message || String(error);
+      }
+    });
+
+    document.getElementById('loginBtn').addEventListener('click', async () => {
+      try {
+        const result = await window.propmanagerrLocal.login(
+          document.getElementById('email').value,
+          document.getElementById('password').value
+        );
+        loginOutput.textContent = JSON.stringify(result, null, 2);
+      } catch (error) {
+        loginOutput.textContent = error.message || String(error);
+      }
+    });
+  </script>
+</body>
+</html>

@@ -8,7 +8,9 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.app.json"
+    "typecheck": "tsc --noEmit -p tsconfig.app.json",
+    "electron:local": "electron electron/main.cjs",
+    "electron:local:build": "electron-builder"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",
@@ -35,5 +37,26 @@
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.3.0",
     "vite": "^5.4.2"
+  },
+  "main": "electron/main.cjs",
+  "productName": "PropManagerr Local Desktop",
+  "description": "PropManagerr offline Windows desktop app with local SQLite database",
+  "author": "Christian Robertson",
+  "build": {
+    "appId": "com.propmanagerr.localdesktop",
+    "productName": "PropManagerr Local Desktop",
+    "directories": {
+      "output": "release-local"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    }
   }
 }
