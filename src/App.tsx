@@ -682,13 +682,92 @@ function Rent({ data, refresh, user }: { data: DashboardData; refresh: () => Pro
     await refresh();
   }
 
-  async function remove(id: string) {
+  
+
+  function tenantPropertyId(tenantId: string) {
+    if (!tenantId) return '';
+    const tenant = data.tenants.find(row => row.id === tenantId);
+    return tenant?.property_id || tenant?.property?.id || '';
+  }
+
+  function resetCreatePayment() {
+    setCreating(false);
+    setCreateForm({
+      tenant_id: '',
+      property_id: '',
+      amount: 0,
+      due_date: new Date().toISOString().slice(0, 10),
+      paid_date: null,
+      status: 'pending',
+      payment_method: '',
+      notes: '',
+    });
+  }
+
+  function selectCreateTenant(tenantId: string) {
+    setCreateForm({
+      ...createForm,
+      tenant_id: tenantId,
+      property_id: tenantPropertyId(tenantId),
+    });
+  }
+
+  async function createPayment(event: FormEvent) {
+    event.preventDefault();
+    const propertyId = createForm.property_id || tenantPropertyId(createForm.tenant_id);
+    await api.createPayment({
+      ...createForm,
+      tenant_id: createForm.tenant_id || null,
+      property_id: propertyId || null,
+      paid_date: createForm.paid_date || null,
+      payment_method: createForm.payment_method || null,
+      notes: createForm.notes || null,
+    });
+    resetCreatePayment();
+    await refresh();
+  }
+async function remove(id: string) {
     await api.deleteRentPayment(id);
     await refresh();
   }
 
   return (
     <div className="space-y-6">
+      {user.role === 'admin' && !creating && !editing && (
+        <div className="flex justify-end">
+          <Button onClick={() => setCreating(true)}>Add payment</Button>
+        </div>
+      )}
+
+      {creating && user.role === 'admin' && (
+        <Card title="Add rent payment">
+          <form onSubmit={createPayment} className="grid gap-4 md:grid-cols-3">
+            <Select<string> label="Tenant" value={fieldValue(createForm.tenant_id)} onChange={value => selectCreateTenant(value)}>
+              <option value="">Choose tenant</option>
+              {data.tenants.map(tenant => <option key={tenant.id} value={tenant.id}>{tenant.name}</option>)}
+            </Select>
+            <Select<string> label="Property" value={fieldValue(createForm.property_id)} onChange={value => setCreateForm({ ...createForm, property_id: value || '' })}>
+              <option value="">Choose property</option>
+              {data.properties.map(property => <option key={property.id} value={property.id}>{property.address}</option>)}
+            </Select>
+            <Input label="Amount" type="number" value={fieldValue(createForm.amount)} onChange={value => setCreateForm({ ...createForm, amount: Number(value) })} required />
+            <Input label="Due date" type="date" value={fieldValue(createForm.due_date)} onChange={value => setCreateForm({ ...createForm, due_date: value })} required />
+            <Input label="Paid date" type="date" value={fieldValue(createForm.paid_date)} onChange={value => setCreateForm({ ...createForm, paid_date: value || null })} />
+            <Select<PaymentStatus> label="Status" value={(createForm.status as PaymentStatus) || 'pending'} onChange={value => setCreateForm({ ...createForm, status: value || 'pending' })}>
+              <option value="pending">Pending</option>
+              <option value="paid">Paid</option>
+              <option value="overdue">Overdue</option>
+            </Select>
+            <Input label="Payment method" value={fieldValue(createForm.payment_method)} onChange={value => setCreateForm({ ...createForm, payment_method: value })} />
+            <Input label="Notes" value={fieldValue(createForm.notes)} onChange={value => setCreateForm({ ...createForm, notes: value })} />
+            <div className="flex items-end gap-2 md:col-span-3">
+              <Button type="submit" disabled={!createForm.tenant_id || !createForm.due_date}>Save payment</Button>
+              <Button variant="secondary" onClick={resetCreatePayment}>Cancel</Button>
+            </div>
+          </form>
+        </Card>
+      )}
+
       {editing && user.role === 'admin' && (
         <Card title="Edit rent payment">
           <form onSubmit={submit} className="grid gap-4 md:grid-cols-3">
