@@ -276,9 +276,82 @@ function health() {
   return { ok: true, database: paths.database, uploads: paths.uploads, counts };
 }
 
-function complianceUpdates() {
-  return db.prepare('SELECT * FROM compliance_updates ORDER BY last_checked DESC, title ASC').all();
+
+function ensureDefaultComplianceUpdates() {
+  const today = new Date().toISOString().slice(0, 10);
+  const updates = [
+    {
+      id: id('cmp_'),
+      title: 'How to rent guide',
+      summary: 'Check the current GOV.UK How to rent guide before starting or renewing a tenancy.',
+      source: 'GOV.UK',
+      url: 'https://www.gov.uk/government/publications/how-to-rent',
+      effective_date: null,
+      last_checked: today,
+      severity: 'required',
+    },
+    {
+      id: id('cmp_'),
+      title: 'Gas safety',
+      summary: 'Check current gas safety responsibilities and keep certificates/records where required.',
+      source: 'HSE',
+      url: 'https://www.hse.gov.uk/gas/landlords/',
+      effective_date: null,
+      last_checked: today,
+      severity: 'required',
+    },
+    {
+      id: id('cmp_'),
+      title: 'Electrical safety',
+      summary: 'Check current electrical safety responsibilities and keep inspection/report records where required.',
+      source: 'GOV.UK',
+      url: 'https://www.gov.uk/guidance/electrical-safety-standards-in-the-private-rented-sector-guidance-for-landlords-tenants-and-local-authorities',
+      effective_date: null,
+      last_checked: today,
+      severity: 'required',
+    },
+    {
+      id: id('cmp_'),
+      title: 'Deposit protection',
+      summary: 'Check deposit protection rules and keep prescribed information records where required.',
+      source: 'GOV.UK',
+      url: 'https://www.gov.uk/deposit-protection-schemes-and-landlords',
+      effective_date: null,
+      last_checked: today,
+      severity: 'required',
+    },
+    {
+      id: id('cmp_'),
+      title: 'Renters Reform / Renters Rights',
+      summary: 'Check current UK Parliament/GOV.UK updates before changing tenancy notices, possession processes, or tenancy terms.',
+      source: 'UK Parliament',
+      url: 'https://bills.parliament.uk/',
+      effective_date: null,
+      last_checked: today,
+      severity: 'important',
+    },
+  ];
+
+  const insert = db.prepare(`
+    INSERT INTO compliance_updates (id, title, summary, source, url, effective_date, last_checked, severity)
+    VALUES (@id, @title, @summary, @source, @url, @effective_date, @last_checked, @severity)
+  `);
+
+  const existingTitles = new Set(
+    db.prepare('SELECT title FROM compliance_updates').all().map(row => row.title)
+  );
+
+  const missingUpdates = updates.filter(row => !existingTitles.has(row.title));
+  if (missingUpdates.length === 0) return;
+
+  const tx = db.transaction((rows) => {
+    for (const row of rows) insert.run(row);
+  });
+
+  tx(missingUpdates);
 }
+
+function complianceUpdates() { ensureDefaultComplianceUpdates(); return db.prepare('SELECT * FROM compliance_updates ORDER BY last_checked DESC, title ASC').all(); }
 
 function createProperty(property) {
   const row = {
