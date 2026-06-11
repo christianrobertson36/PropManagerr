@@ -69,6 +69,10 @@ function uploadDocumentFile(req, res, next) {
 }
 
 const adminCrud = (path, table, fields, name) => {
+  app.get(path, requireAuth, requireAdmin, async (_req, res) => {
+    const { rows } = await query(`select * from ${table} order by created_at desc`);
+    res.json(rows);
+  });
   app.post(path, requireAuth, requireAdmin, async (req, res) => {
     const values = fields.map((field) => req.body[field] ?? null);
     const columns = fields.join(', ');
@@ -604,6 +608,17 @@ async function normaliseDocumentPayload(body) {
   };
 }
 
+app.get('/documents', requireAuth, requireAdmin, async (_req, res) => {
+  const { rows } = await query(`
+    select d.*, p.address as property, t.name as tenant
+    from documents d
+    left join properties p on p.id=d.property_id
+    left join tenants t on t.id=d.tenant_id
+    order by d.created_at desc
+  `);
+  res.json(rows);
+});
+
 app.post('/documents', requireAuth, requireAdmin, async (req, res) => {
   const payload = await normaliseDocumentPayload(req.body || {});
   if (!payload.name) return res.status(400).json({ error: 'Document name is required' });
@@ -671,3 +686,5 @@ const port = Number(process.env.PORT || 3000);
 await initDatabase();
 await applyRuntimeMigrations();
 app.listen(port, () => console.log(`PropManager API listening on ${port}`));
+
+
