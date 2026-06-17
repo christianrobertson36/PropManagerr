@@ -620,6 +620,41 @@ function agreementFileName(agreement: any) {
   return `tenancy-agreement-${tenant}-${version}.txt`;
 }
 
+
+function auditDate(value: any) {
+  if (!value) return 'Not recorded yet';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString();
+}
+
+function auditText(value: any, fallback = 'Not recorded yet') {
+  const text = value === null || value === undefined ? '' : String(value).trim();
+  return text || fallback;
+}
+
+function AgreementAuditTrail({ agreement }: { agreement: any }) {
+  const savedDocument = auditText(agreement?.signed_document_url, 'Not saved yet');
+
+  return (
+    <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
+      <p className="font-semibold text-slate-900">Agreement audit trail</p>
+      <div className="mt-2 grid gap-2 md:grid-cols-2">
+        <div><span className="font-medium text-slate-700">Created:</span> {auditDate(agreement?.created_at)}</div>
+        <div><span className="font-medium text-slate-700">Sent/manual sent:</span> {auditDate(agreement?.sent_at)}</div>
+        <div><span className="font-medium text-slate-700">DocuSign envelope:</span> {auditText(agreement?.docusign_envelope_id, 'Not sent via DocuSign')}</div>
+        <div><span className="font-medium text-slate-700">Signed:</span> {auditDate(agreement?.signed_at)}</div>
+        <div className="md:col-span-2">
+          <span className="font-medium text-slate-700">Saved document:</span>{' '}
+          {agreement?.signed_document_url ? (
+            <a className="font-medium text-emerald-700 hover:text-emerald-800" href={agreement.signed_document_url} target="_blank" rel="noreferrer">Open saved document</a>
+          ) : savedDocument}
+        </div>
+        <div className="md:col-span-2"><span className="font-medium text-slate-700">Notes:</span> {auditText(agreement?.notes, 'No notes saved yet')}</div>
+      </div>
+    </div>
+  );
+}
 function escapeHtml(value: string) {
   const chars: Record<string, string> = {
     '&': '&amp;',
@@ -1006,6 +1041,7 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
                 Saved in Documents. Tenants can view it from the Documents area.
               </div>
             )}
+            <AgreementAuditTrail agreement={agreement} />
             <div className="mt-3 flex flex-wrap gap-2">
               <Button variant="secondary" onClick={() => setPreviewAgreement(agreement)}>Preview</Button>
               <Button variant="secondary" onClick={() => printAgreementText(agreement)}>Print</Button>
@@ -1113,6 +1149,8 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
                 This agreement has been saved to Documents.
               </div>
             )}
+
+            <AgreementAuditTrail agreement={previewAgreement} />
 
             <pre className="whitespace-pre-wrap rounded-lg border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-800 shadow-inner">
               {agreementText(previewAgreement)}
