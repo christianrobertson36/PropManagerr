@@ -21,6 +21,7 @@ import type {
   AdminAccountPayload,
   LicenceKey,
   LicencePayload,
+  DeletedRecord,
   ComplianceUpdate,
   DocumentPayload,
   ExpensePayload,
@@ -1884,6 +1885,102 @@ function LicenceManagement() {
   );
 }
 
+function TrashBin() {
+  const [records, setRecords] = useState<DeletedRecord[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [restoringId, setRestoringId] = useState<string | null>(null);
+
+  async function loadTrash() {
+    setLoading(true);
+    setError('');
+    try {
+      const rows = await api.listTrash();
+      setRecords(rows);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load trash');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadTrash();
+  }, []);
+
+  async function restore(record: DeletedRecord) {
+    const confirmed = window.confirm('Restore "' + record.name + '" from ' + record.table + '?');
+    if (!confirmed) return;
+
+    setRestoringId(record.table + ':' + record.id);
+    setError('');
+    try {
+      await api.restoreDeletedRecord(record.table, record.id);
+      await loadTrash();
+      window.alert('Restored "' + record.name + '". Refreshing dashboard data now.');
+      window.location.reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not restore deleted record');
+    } finally {
+      setRestoringId(null);
+    }
+  }
+
+  function friendlyTable(table: string) {
+    return table.replace(/_/g, ' ');
+  }
+
+  return (
+    <Card title="Trash / Recently deleted">
+      <div className="mb-4 flex flex-col justify-between gap-3 md:flex-row md:items-center">
+        <div>
+          <p className="text-sm text-slate-600">Restore deleted properties, tenants, rent payments, repairs, documents and expenses.</p>
+          <p className="mt-1 text-xs text-slate-500">Permanent delete is not enabled yet, so this stays safe while we test restore.</p>
+        </div>
+        <Button variant="secondary" disabled={loading} onClick={() => void loadTrash()}>
+          {loading ? 'Refreshing...' : 'Refresh trash'}
+        </Button>
+      </div>
+
+      {error && <p className="mb-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
+
+      {records.length === 0 ? (
+        <p className="text-sm text-slate-600">Trash is empty.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-slate-200 text-sm">
+            <thead>
+              <tr>
+                <th className="px-3 py-2 text-left font-semibold text-slate-700">Type</th>
+                <th className="px-3 py-2 text-left font-semibold text-slate-700">Name</th>
+                <th className="px-3 py-2 text-left font-semibold text-slate-700">Deleted</th>
+                <th className="px-3 py-2 text-left font-semibold text-slate-700">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {records.map(record => {
+                const key = record.table + ':' + record.id;
+                return (
+                  <tr key={key}>
+                    <td className="px-3 py-2 capitalize text-slate-600">{friendlyTable(record.table)}</td>
+                    <td className="px-3 py-2 font-medium text-slate-900">{record.name || record.id}</td>
+                    <td className="px-3 py-2 text-slate-600">{dateOnly(record.deleted_at)}</td>
+                    <td className="px-3 py-2">
+                      <Button variant="secondary" disabled={restoringId === key} onClick={() => void restore(record)}>
+                        {restoringId === key ? 'Restoring...' : 'Restore'}
+                      </Button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function Admin({ data }: { data: DashboardData; refresh: () => Promise<void> }) {
   const [accounts, setAccounts] = useState<AdminAccount[]>([]);
   const [editing, setEditing] = useState<AdminAccount | null>(null);
@@ -1920,6 +2017,8 @@ function Admin({ data }: { data: DashboardData; refresh: () => Promise<void> }) 
 
   return (
     <div className="space-y-8">
+      <TrashBin />
+
       <CrudLayout title={editing ? 'Edit login account' : 'Add login account'} onSubmit={submit} onCancel={reset} editing={Boolean(editing)}>
         <Input label="Name" value={fieldValue(form.name)} onChange={value => setForm({ ...form, name: value })} required />
         <Input label="Email" type="email" value={fieldValue(form.email)} onChange={value => setForm({ ...form, email: value })} required />

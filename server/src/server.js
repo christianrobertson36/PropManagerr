@@ -117,6 +117,36 @@ const adminCrud = (path, table, fields, name) => {
   });
 };
 
+app.get('/trash', requireAuth, requireAdmin, async (_req, res) => {
+  const tables = ['properties', 'tenants', 'rent_payments', 'maintenance_tickets', 'documents', 'expenses'];
+  const records = [];
+
+  for (const table of tables) {
+    const { rows } = await query(`select * from ${table} where deleted_at is not null order by deleted_at desc limit 50`);
+    for (const row of rows) {
+      const name =
+        row.address ||
+        row.name ||
+        row.title ||
+        row.description ||
+        row.category ||
+        row.email ||
+        row.id;
+
+      records.push({
+        table,
+        id: row.id,
+        name,
+        deleted_at: row.deleted_at,
+        row,
+      });
+    }
+  }
+
+  records.sort((a, b) => new Date(b.deleted_at || 0).getTime() - new Date(a.deleted_at || 0).getTime());
+  res.json(records);
+});
+
 app.post('/trash/restore', requireAuth, requireAdmin, async (req, res) => {
   const table = String(req.body?.table || '').trim();
   const id = String(req.body?.id || '').trim();

@@ -153,6 +153,14 @@ export type LicencePayload = {
   notes?: string | null;
 };
 
+export type DeletedRecord = {
+  table: string;
+  id: string;
+  name: string;
+  deleted_at?: string | null;
+  row: Record<string, any>;
+};
+
 export type ComplianceUpdate = {
   id: string;
   title: string;
@@ -274,6 +282,8 @@ export const api = {
     request<{ document: DocumentRecord; agreement: TenancyAgreement }>('/tenancy-agreements/' + id + '/save-document', {
       method: 'POST',
     }),
+
+  listTrash: () => request<DeletedRecord[]>('/trash'),
 
   restoreDeletedRecord: (table: string, id: string) =>
     request('/trash/restore', {
