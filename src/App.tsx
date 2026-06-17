@@ -756,6 +756,7 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
   const [creatingPortalTenantId, setCreatingPortalTenantId] = useState<string | null>(null);
   const [previewTenant, setPreviewTenant] = useState<Tenant | null>(null);
   const [tenantPropertyFilter, setTenantPropertyFilter] = useState('');
+  const [selectedTenantId, setSelectedTenantId] = useState('');
   const agreementStatuses = ['draft', 'sent', 'signed', 'voided', 'expired'];
 
   async function loadTenantAgreements() {
@@ -1212,11 +1213,19 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
     tenant_id: previewTenant.id,
   } as any) : null;
 
-  const filteredTenants = data.tenants.filter(tenant => {
+  const tenantOptions = data.tenants.filter(tenant => {
     const tenantPropertyId = tenant.property_id || tenant.property?.id || '';
     return !tenantPropertyFilter || tenantPropertyId === tenantPropertyFilter;
   });
+  const selectedTenant = selectedTenantId ? data.tenants.find(tenant => tenant.id === selectedTenantId) || null : null;
+  const filteredTenants = tenantOptions.filter(tenant => !selectedTenantId || tenant.id === selectedTenantId);
   const selectedTenantProperty = tenantPropertyFilter ? data.properties.find(property => property.id === tenantPropertyFilter) || null : null;
+  const selectedTenantAgreements = selectedTenant ? agreementsByTenant[selectedTenant.id] || [] : [];
+  const selectedTenantRent = selectedTenant ? data.rentPayments.filter(payment => payment.tenant_id === selectedTenant.id) : [];
+  const selectedTenantDocuments = selectedTenant ? data.documents.filter(document => document.tenant_id === selectedTenant.id || Boolean(selectedTenant.property_id && document.property_id === selectedTenant.property_id)) : [];
+  const selectedTenantRepairs = selectedTenant ? data.maintenanceTickets.filter(ticket => ticket.tenant_id === selectedTenant.id || Boolean(selectedTenant.property_id && ticket.property_id === selectedTenant.property_id)) : [];
+  const selectedTenantPortalAccounts = selectedTenant ? tenantPortalAccounts(selectedTenant) : [];
+  const selectedTenantHasActivePortal = selectedTenantPortalAccounts.some(account => account.active);
 
   return (
     <CrudLayout title={editing ? 'Edit tenant' : 'Add tenant'} onSubmit={submit} onCancel={reset} editing={Boolean(editing)}>
@@ -1336,19 +1345,53 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
         </div>
       )}
 
-      <Card title="Filter tenants by property">
+      <Card title="Filter tenants">
         <div className="grid gap-4 md:grid-cols-3">
-          <Select<string> label="Show tenants for" value={tenantPropertyFilter} onChange={value => setTenantPropertyFilter(value || '')}>
+          <Select<string> label="Show property" value={tenantPropertyFilter} onChange={value => { setTenantPropertyFilter(value || ''); setSelectedTenantId(''); }}>
             <option value="">All properties</option>
             {data.properties.map(property => <option key={property.id} value={property.id}>{property.address}</option>)}
           </Select>
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 md:col-span-2">
-            <p className="font-medium text-slate-900">{tenantPropertyFilter ? selectedTenantProperty?.address || 'Selected property' : 'All properties'}</p>
+          <Select<string> label="Select tenant" value={selectedTenantId} onChange={value => setSelectedTenantId(value || '')}>
+            <option value="">All tenants</option>
+            {tenantOptions.map(tenant => <option key={tenant.id} value={tenant.id}>{tenant.name} - {tenant.property?.address || 'Unassigned'}</option>)}
+          </Select>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+            <p className="font-medium text-slate-900">{selectedTenant ? selectedTenant.name : tenantPropertyFilter ? selectedTenantProperty?.address || 'Selected property' : 'All properties'}</p>
             <p>{filteredTenants.length} of {data.tenants.length} tenants shown.</p>
-            <p className="text-xs text-slate-500">Use this to keep the tenant list short once more properties and tenants are added.</p>
+            <p className="text-xs text-slate-500">Choose a tenant to show only that tenant and their connected records.</p>
           </div>
         </div>
       </Card>
+
+      {selectedTenant && (
+        <Card title="Selected tenant summary">
+          <div className="grid gap-4 md:grid-cols-4">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+              <p className="text-xs uppercase tracking-wide text-slate-500">Tenant</p>
+              <p className="font-semibold text-slate-900">{selectedTenant.name}</p>
+              <p className="text-slate-600">{selectedTenant.email || 'No email saved'}</p>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+              <p className="text-xs uppercase tracking-wide text-slate-500">Connected property</p>
+              <p className="font-semibold text-slate-900">{selectedTenant.property?.address || 'Unassigned'}</p>
+              <p className="text-slate-600">Lease ends: {dateOnly(selectedTenant.lease_end) || '-'}</p>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+              <p className="text-xs uppercase tracking-wide text-slate-500">Records</p>
+              <p className="text-slate-700">Agreements: {selectedTenantAgreements.length}</p>
+              <p className="text-slate-700">Rent: {selectedTenantRent.length} · Docs: {selectedTenantDocuments.length} · Repairs: {selectedTenantRepairs.length}</p>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+              <p className="text-xs uppercase tracking-wide text-slate-500">Portal</p>
+              <p className={selectedTenantHasActivePortal ? 'font-semibold text-emerald-700' : 'font-semibold text-amber-700'}>{selectedTenantHasActivePortal ? 'Login active' : 'Login not active'}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button variant="primary" onClick={() => setPreviewTenant(selectedTenant)}>View tenant portal</Button>
+                <Button variant="secondary" onClick={() => void copyTenantPortalSetup(selectedTenant)}>Copy setup</Button>
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
 
       <Table
         columns={['Name', 'Email', 'Property', 'Lease end', 'Status', 'Agreement', 'Portal', 'Actions']}
@@ -2217,7 +2260,7 @@ function LicenceManagement() {
 
 function AdminSafetyChecks() {
   const [checkingHealth, setCheckingHealth] = useState(false);
-  const webBuildVersion = 'v61';
+  const webBuildVersion = 'v63';
   const [healthStatus, setHealthStatus] = useState<'not_checked' | 'ok' | 'error'>('not_checked');
   const [healthMessage, setHealthMessage] = useState('Not checked in this browser session.');
   const [apiBuildVersion, setApiBuildVersion] = useState('not checked');
