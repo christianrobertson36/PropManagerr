@@ -836,6 +836,11 @@ async function applyRuntimeMigrations() {
     await query(`alter table ${table} add column if not exists deleted_at timestamptz`);
   }
 
+  // Expense form fields used by the admin UI.
+  await query('alter table expenses add column if not exists supplier text');
+  await query('alter table expenses add column if not exists receipt_url text');
+  await query('alter table expenses add column if not exists notes text');
+
 
   // Tenancy agreement versioning foundation.
   await query(`
