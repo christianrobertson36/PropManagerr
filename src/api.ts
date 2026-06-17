@@ -250,6 +250,11 @@ export const api = {
       body: JSON.stringify(account),
     }),
 
+  createTenantPortalAccount: (tenantId: string) =>
+    request<{ account: AdminAccount; temporary_password?: string | null; existing?: boolean }>(`/admin/tenants/${tenantId}/portal-account`, {
+      method: 'POST',
+    }),
+
   listLicences: () => request<LicenceKey[]>('/admin/licenses'),
 
   createLicence: (licence: LicencePayload) =>
@@ -407,3 +412,4 @@ export const api = {
     return res.json();
   },
 };
+

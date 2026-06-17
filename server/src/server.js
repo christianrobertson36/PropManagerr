@@ -481,6 +481,41 @@ app.post('/admin/accounts', requireAuth, requireAdmin, async (req, res) => {
   }
 });
 
+app.post('/admin/tenants/:id/portal-account', requireAuth, requireAdmin, async (req, res) => {
+  const { rows: tenantRows } = await query('select * from tenants where id=$1 and deleted_at is null', [req.params.id]);
+  const tenant = tenantRows[0];
+  if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
+  if (!tenant.email) return res.status(400).json({ error: 'Tenant email is required before creating a portal login' });
+
+  const { rows: existingRows } = await query(
+    `select id, name, email, role, tenant_id, active
+     from app_users
+     where role='tenant' and tenant_id=$1
+     order by active desc, name
+     limit 1`,
+    [tenant.id]
+  );
+  if (existingRows[0]) {
+    return res.status(200).json({ account: existingRows[0], temporary_password: null, existing: true });
+  }
+
+  const temporaryPassword = crypto.randomBytes(9).toString('base64url') + 'A1!';
+  const passwordHash = await hashPassword(temporaryPassword);
+
+  try {
+    const { rows } = await query(
+      `insert into app_users(name, email, password_hash, role, tenant_id, active)
+       values ($1, $2, $3, 'tenant', $4, true)
+       returning id, name, email, role, tenant_id, active`,
+      [tenant.name, tenant.email, passwordHash, tenant.id]
+    );
+    res.status(201).json({ account: rows[0], temporary_password: temporaryPassword, existing: false });
+  } catch (err) {
+    if (err?.code === '23505') return res.status(409).json({ error: 'An account with this email already exists. Link it from Admin Accounts.' });
+    throw err;
+  }
+});
+
 app.patch('/admin/accounts/:id', requireAuth, requireAdmin, async (req, res) => {
   const allowedFields = ['name', 'email', 'role', 'tenant_id', 'active'];
   const updates = [];
@@ -1251,5 +1286,6 @@ const port = Number(process.env.PORT || 3000);
 await initDatabase();
 await applyRuntimeMigrations();
 app.listen(port, () => console.log(`PropManager API listening on ${port}`));
+
 
 

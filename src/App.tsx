@@ -753,6 +753,7 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
   const [agreementNotice, setAgreementNotice] = useState('');
   const [docusignStatus, setDocusignStatus] = useState<any | null>(null);
   const [portalAccounts, setPortalAccounts] = useState<AdminAccount[]>([]);
+  const [creatingPortalTenantId, setCreatingPortalTenantId] = useState<string | null>(null);
   const [previewTenant, setPreviewTenant] = useState<Tenant | null>(null);
   const agreementStatuses = ['draft', 'sent', 'signed', 'voided', 'expired'];
 
@@ -1132,6 +1133,37 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
     window.alert('Tenant portal setup details copied.');
   }
 
+  async function createTenantPortalLogin(tenant: Tenant) {
+    if (!tenant.email) {
+      window.alert('Add the tenant email before creating a portal login.');
+      return;
+    }
+
+    setCreatingPortalTenantId(tenant.id);
+    try {
+      const result = await api.createTenantPortalAccount(tenant.id);
+      await loadPortalAccounts();
+
+      const setup = [
+        'PropManagerr tenant portal login',
+        'URL: ' + window.location.origin,
+        'Tenant: ' + tenant.name,
+        'Login email: ' + result.account.email,
+        result.temporary_password ? 'Temporary password: ' + result.temporary_password : 'Password: account already existed - reset in Admin > Admin Accounts if needed.',
+      ].join('\n');
+
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(setup);
+      }
+
+      window.alert(result.existing ? 'Portal login already exists. Setup details copied where possible.' : 'Portal login created. Temporary login details copied.');
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Could not create tenant portal login');
+    } finally {
+      setCreatingPortalTenantId(null);
+    }
+  }
+
   function tenantPortalPanel(tenant: Tenant) {
     const linkedAccounts = tenantPortalAccounts(tenant);
     const activeAccount = linkedAccounts.find(account => account.active) || null;
@@ -1160,6 +1192,11 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
         )}
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" onClick={() => setPreviewTenant(tenant)}>View portal</Button>
+          {!activeAccount && !inactiveAccount && (
+            <Button variant="primary" disabled={creatingPortalTenantId === tenant.id || !tenant.email} onClick={() => void createTenantPortalLogin(tenant)}>
+              {creatingPortalTenantId === tenant.id ? 'Creating...' : 'Create login'}
+            </Button>
+          )}
           <Button variant="secondary" onClick={() => void copyTenantPortalSetup(tenant)}>Copy setup</Button>
         </div>
       </div>
@@ -1856,11 +1893,11 @@ function Documents({ data, refresh, user }: { data: DashboardData; refresh: () =
           document.tenant?.name || tenantName(document.tenant_id),
           dateOnly(document.expiry_date) || '-',
           document.file_url ? (
-            <a key={`${document.id}-file`} className="font-medium text-emerald-700 hover:underline" href={api.documentFileUrl(document.file_url)} target="_blank" rel="noreferrer">
+            <a key={`${document.id}-file`} className="inline-flex min-h-10 items-center rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100" href={api.documentFileUrl(document.file_url)} target="_blank" rel="noreferrer">
               {document.doc_type === 'tenancy_agreement' ? 'Open signed agreement' : 'View file'}
             </a>
           ) : (
-            <span className="text-amber-700">No file uploaded</span>
+            <span className="inline-flex min-h-10 items-center rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">No file uploaded</span>
           ),
           user.role === 'admin' ? (
             <div className="flex gap-2">
@@ -2159,7 +2196,7 @@ function LicenceManagement() {
 
 function AdminSafetyChecks() {
   const [checkingHealth, setCheckingHealth] = useState(false);
-  const webBuildVersion = 'v60';
+  const webBuildVersion = 'v61';
   const [healthStatus, setHealthStatus] = useState<'not_checked' | 'ok' | 'error'>('not_checked');
   const [healthMessage, setHealthMessage] = useState('Not checked in this browser session.');
   const [apiBuildVersion, setApiBuildVersion] = useState('not checked');
@@ -2689,5 +2726,6 @@ export default function App() {
     </div>
   );
 }
+
 
 
