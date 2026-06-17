@@ -270,6 +270,11 @@ export const api = {
       body: JSON.stringify(agreement),
     }),
 
+  saveTenancyAgreementAsDocument: (id: string) =>
+    request<{ document: DocumentRecord; agreement: TenancyAgreement }>('/tenancy-agreements/' + id + '/save-document', {
+      method: 'POST',
+    }),
+
   createProperty: (property: PropertyPayload) =>
     request('/properties', {
       method: 'POST',

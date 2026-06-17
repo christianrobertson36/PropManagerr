@@ -657,6 +657,49 @@ app.post('/tenancy-agreements', requireAuth, requireAdmin, async (req, res) => {
   res.status(201).json(rows[0]);
 });
 
+app.post('/tenancy-agreements/:id/save-document', requireAuth, requireAdmin, async (req, res) => {
+  const { rows } = await query(
+    `select a.*, row_to_json(t.*) as tenant, row_to_json(p.*) as property
+     from tenancy_agreements a
+     left join tenants t on t.id=a.tenant_id
+     left join properties p on p.id=a.property_id
+     where a.id=$1`,
+    [req.params.id]
+  );
+  const agreement = rows[0];
+  if (!agreement) return res.status(404).json({ error: 'Tenancy agreement not found' });
+
+  const body = agreement.agreement_body || 'No agreement wording saved yet.';
+  const safeTenant = String(agreement.tenant_name_snapshot || 'tenant')
+    .replace(/[^a-zA-Z0-9-_ ]/g, '')
+    .trim()
+    .replace(/\s+/g, '-') || 'tenant';
+  const filename = `tenancy-agreement-${safeTenant}-v${agreement.agreement_version}-${Date.now()}.txt`;
+  const filePath = `${documentUploadDir}/${filename}`;
+  await fs.writeFile(filePath, body, 'utf8');
+  const fileUrl = `/uploads/documents/${filename}`;
+
+  const documentResult = await query(
+    `insert into documents (property_id, tenant_id, name, doc_type, expiry_date, file_url)
+     values ($1,$2,$3,$4,$5,$6) returning *`,
+    [
+      agreement.property_id || null,
+      agreement.tenant_id,
+      `Tenancy Agreement - ${agreement.tenant_name_snapshot} - v${agreement.agreement_version}`,
+      'tenancy_agreement',
+      agreement.lease_end_snapshot || null,
+      fileUrl,
+    ]
+  );
+
+  const updated = await query(
+    'update tenancy_agreements set signed_document_url=$2, updated_at=now() where id=$1 returning *',
+    [agreement.id, fileUrl]
+  );
+
+  res.status(201).json({ document: documentResult.rows[0], agreement: updated.rows[0] });
+});
+
 app.patch('/tenancy-agreements/:id', requireAuth, requireAdmin, async (req, res) => {
   const fields = [
     'agreement_title',

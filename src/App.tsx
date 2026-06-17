@@ -827,6 +827,25 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
     }
   }
 
+  async function saveAgreementAsDocument(agreement: any) {
+    const confirmed = window.confirm('Save this tenancy agreement as a tenant document? This creates a Documents record and stores the current wording as the saved agreement file.');
+    if (!confirmed) return;
+
+    setSavingAgreementId(agreement.id);
+    setAgreementError('');
+    setAgreementNotice('');
+    try {
+      await api.saveTenancyAgreementAsDocument(agreement.id);
+      setAgreementNotice('Agreement saved to Documents.');
+      setPreviewAgreement(null);
+      await Promise.all([loadTenantAgreements(), refresh()]);
+    } catch (err) {
+      setAgreementError(err instanceof Error ? err.message : 'Could not save agreement as document');
+    } finally {
+      setSavingAgreementId(null);
+    }
+  }
+
   function agreementPanel(tenant: Tenant) {
     const agreements = agreementsByTenant[tenant.id] || [];
     if (!agreements.length) {
@@ -864,11 +883,19 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
                 Signed version: keep wording locked. Create a new version if terms change.
               </div>
             )}
+            {agreement.signed_document_url && (
+              <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-800">
+                Saved in Documents. Tenants can view it from the Documents area.
+              </div>
+            )}
             <div className="mt-3 flex flex-wrap gap-2">
               <Button variant="secondary" onClick={() => setPreviewAgreement(agreement)}>Preview</Button>
               <Button variant="secondary" onClick={() => printAgreementText(agreement)}>Print</Button>
               <Button variant="secondary" onClick={() => downloadAgreementText(agreement)}>Download</Button>
               <Button variant="secondary" onClick={() => void copyAgreement(agreement)}>Copy text</Button>
+              <Button variant="secondary" disabled={savingAgreementId === agreement.id} onClick={() => void saveAgreementAsDocument(agreement)}>
+                {savingAgreementId === agreement.id ? 'Saving doc...' : agreement.signed_document_url ? 'Saved to Docs' : 'Save as document'}
+              </Button>
               <Button variant="secondary" disabled={agreement.status === 'signed'} onClick={() => startEditAgreementBody(agreement)}>
                 {agreement.status === 'signed' ? 'Signed locked' : 'Edit wording'}
               </Button>
@@ -921,6 +948,9 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
                 <Button variant="secondary" onClick={() => printAgreementText(previewAgreement)}>Print</Button>
                 <Button variant="secondary" onClick={() => downloadAgreementText(previewAgreement)}>Download</Button>
                 <Button variant="secondary" onClick={() => void copyAgreement(previewAgreement)}>Copy text</Button>
+                <Button variant="secondary" disabled={savingAgreementId === previewAgreement.id} onClick={() => void saveAgreementAsDocument(previewAgreement)}>
+                  {savingAgreementId === previewAgreement.id ? 'Saving doc...' : previewAgreement.signed_document_url ? 'Saved to Docs' : 'Save as document'}
+                </Button>
                 <Button variant="secondary" onClick={() => setPreviewAgreement(null)}>Close</Button>
               </div>
             </div>
@@ -935,6 +965,12 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
             {previewAgreement.status === 'signed' && (
               <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
                 Signed agreement: keep this version as the record. Create a new version for any changed terms.
+              </div>
+            )}
+
+            {previewAgreement.signed_document_url && (
+              <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+                This agreement has been saved to Documents.
               </div>
             )}
 
