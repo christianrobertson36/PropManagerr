@@ -752,6 +752,7 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
   const [agreementBodyDraft, setAgreementBodyDraft] = useState('');
   const [agreementNotice, setAgreementNotice] = useState('');
   const [docusignStatus, setDocusignStatus] = useState<any | null>(null);
+  const [previewTenant, setPreviewTenant] = useState<Tenant | null>(null);
   const agreementStatuses = ['draft', 'sent', 'signed', 'voided', 'expired'];
 
   async function loadTenantAgreements() {
@@ -1086,6 +1087,14 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
     );
   }
 
+  const tenantPreviewUser = previewTenant ? ({
+    id: 'tenant-preview-' + previewTenant.id,
+    name: previewTenant.name || 'Tenant preview',
+    email: previewTenant.email || '',
+    role: 'tenant',
+    tenant_id: previewTenant.id,
+  } as any) : null;
+
   return (
     <CrudLayout title={editing ? 'Edit tenant' : 'Add tenant'} onSubmit={submit} onCancel={reset} editing={Boolean(editing)}>
       <Select<string> label="Property" value={fieldValue(form.property_id)} onChange={value => setForm({ ...form, property_id: value || null })}>
@@ -1164,6 +1173,21 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
         </div>
       )}
 
+      {previewTenant && tenantPreviewUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+          <div className="max-h-[85vh] w-full max-w-6xl overflow-y-auto rounded-xl bg-slate-50 p-5 shadow-xl">
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">Tenant portal preview</h3>
+                <p className="text-sm text-slate-500">Previewing what {previewTenant.name} can see. This does not log in as the tenant or change data.</p>
+              </div>
+              <Button variant="secondary" onClick={() => setPreviewTenant(null)}>Close preview</Button>
+            </div>
+            <TenantPortal data={data} user={tenantPreviewUser} />
+          </div>
+        </div>
+      )}
+
       {editingAgreement && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
           <div className="w-full max-w-3xl rounded-xl bg-white p-5 shadow-xl">
@@ -1202,7 +1226,10 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
             {agreementNotice && <div className="text-xs text-emerald-700">{agreementNotice}</div>}
             {agreementError && <div className="text-xs text-rose-600">{agreementError}</div>}
           </div>,
-          <Actions onEdit={() => startEdit(tenant)} onDelete={() => remove(tenant)} />,
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" onClick={() => setPreviewTenant(tenant)}>Preview portal</Button>
+            <Actions onEdit={() => startEdit(tenant)} onDelete={() => remove(tenant)} />
+          </div>,
         ])}
       />
     </CrudLayout>
@@ -2585,4 +2612,5 @@ export default function App() {
     </div>
   );
 }
+
 
