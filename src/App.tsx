@@ -752,6 +752,7 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
   const [agreementBodyDraft, setAgreementBodyDraft] = useState('');
   const [agreementNotice, setAgreementNotice] = useState('');
   const [docusignStatus, setDocusignStatus] = useState<any | null>(null);
+  const [portalAccounts, setPortalAccounts] = useState<AdminAccount[]>([]);
   const [previewTenant, setPreviewTenant] = useState<Tenant | null>(null);
   const agreementStatuses = ['draft', 'sent', 'signed', 'voided', 'expired'];
 
@@ -783,9 +784,19 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
     }
   }
 
+  async function loadPortalAccounts() {
+    try {
+      const accounts = await api.listAdminAccounts();
+      setPortalAccounts(accounts);
+    } catch (err) {
+      setPortalAccounts([]);
+    }
+  }
+
   useEffect(() => {
     void loadTenantAgreements();
     void loadDocuSignStatus();
+    void loadPortalAccounts();
   }, []);
 
   function startEdit(tenant: Tenant) {
@@ -1087,6 +1098,74 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
     );
   }
 
+  function tenantPortalAccounts(tenant: Tenant) {
+    return portalAccounts.filter(account => account.role === 'tenant' && account.tenant_id === tenant.id);
+  }
+
+  async function copyTenantPortalSetup(tenant: Tenant) {
+    const linkedAccounts = tenantPortalAccounts(tenant);
+    const linkedAccount = linkedAccounts[0];
+    const details = [
+      'PropManagerr tenant portal setup',
+      'URL: ' + window.location.origin,
+      'Tenant: ' + tenant.name,
+      'Tenant email: ' + (tenant.email || 'Missing - add tenant email first'),
+      'Login email: ' + (linkedAccount?.email || tenant.email || 'Create a linked tenant account first'),
+      linkedAccount ? 'Portal login: linked to tenant account' : 'Portal login: not linked yet - create one in Admin > Admin Accounts',
+      'Password: set or reset this in Admin > Admin Accounts before sending to tenant.',
+    ].join('\n');
+
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(details);
+    } else {
+      const textarea = document.createElement('textarea');
+      textarea.value = details;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      document.execCommand('copy');
+      textarea.remove();
+    }
+
+    window.alert('Tenant portal setup details copied.');
+  }
+
+  function tenantPortalPanel(tenant: Tenant) {
+    const linkedAccounts = tenantPortalAccounts(tenant);
+    const activeAccount = linkedAccounts.find(account => account.active) || null;
+    const inactiveAccount = linkedAccounts.find(account => !account.active) || null;
+
+    return (
+      <div className="min-w-56 space-y-2 text-xs">
+        {activeAccount ? (
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-emerald-800">
+            <p className="font-semibold">Portal login linked</p>
+            <p>{activeAccount.email}</p>
+          </div>
+        ) : inactiveAccount ? (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-amber-800">
+            <p className="font-semibold">Portal login inactive</p>
+            <p>{inactiveAccount.email}</p>
+          </div>
+        ) : (
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-slate-700">
+            <p className="font-semibold">No portal login linked</p>
+            <p>Create one in Admin &gt; Admin Accounts.</p>
+          </div>
+        )}
+        {!tenant.email && (
+          <div className="rounded-lg border border-rose-200 bg-rose-50 p-2 text-rose-700">Tenant email missing.</div>
+        )}
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" onClick={() => setPreviewTenant(tenant)}>View portal</Button>
+          <Button variant="secondary" onClick={() => void copyTenantPortalSetup(tenant)}>Copy setup</Button>
+        </div>
+      </div>
+    );
+  }
+
   const tenantPreviewUser = previewTenant ? ({
     id: 'tenant-preview-' + previewTenant.id,
     name: previewTenant.name || 'Tenant preview',
@@ -1214,7 +1293,7 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
       )}
 
       <Table
-        columns={['Name', 'Email', 'Property', 'Lease end', 'Status', 'Agreement', 'Actions']}
+        columns={['Name', 'Email', 'Property', 'Lease end', 'Status', 'Agreement', 'Portal', 'Actions']}
         rows={data.tenants.map(tenant => [
           tenant.name,
           tenant.email,
@@ -1226,10 +1305,8 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
             {agreementNotice && <div className="text-xs text-emerald-700">{agreementNotice}</div>}
             {agreementError && <div className="text-xs text-rose-600">{agreementError}</div>}
           </div>,
-          <div className="flex flex-wrap gap-2">
-            <Button variant="secondary" onClick={() => setPreviewTenant(tenant)}>Preview portal</Button>
-            <Actions onEdit={() => startEdit(tenant)} onDelete={() => remove(tenant)} />
-          </div>,
+          tenantPortalPanel(tenant),
+          <Actions onEdit={() => startEdit(tenant)} onDelete={() => remove(tenant)} />,
         ])}
       />
     </CrudLayout>
@@ -2082,7 +2159,7 @@ function LicenceManagement() {
 
 function AdminSafetyChecks() {
   const [checkingHealth, setCheckingHealth] = useState(false);
-  const webBuildVersion = 'v56';
+  const webBuildVersion = 'v60';
   const [healthStatus, setHealthStatus] = useState<'not_checked' | 'ok' | 'error'>('not_checked');
   const [healthMessage, setHealthMessage] = useState('Not checked in this browser session.');
   const [apiBuildVersion, setApiBuildVersion] = useState('not checked');
