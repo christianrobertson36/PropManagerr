@@ -1928,6 +1928,93 @@ function LicenceManagement() {
   );
 }
 
+
+function AdminSafetyChecks() {
+  const [checkingHealth, setCheckingHealth] = useState(false);
+  const [healthStatus, setHealthStatus] = useState<'not_checked' | 'ok' | 'error'>('not_checked');
+  const [healthMessage, setHealthMessage] = useState('Not checked in this browser session.');
+
+  async function checkHealth() {
+    setCheckingHealth(true);
+    setHealthStatus('not_checked');
+    setHealthMessage('Checking API health...');
+    try {
+      const result = await api.health();
+      if (result?.ok) {
+        setHealthStatus('ok');
+        setHealthMessage('API health check passed.');
+      } else {
+        setHealthStatus('error');
+        setHealthMessage('API replied, but did not return ok=true.');
+      }
+    } catch (err) {
+      setHealthStatus('error');
+      setHealthMessage(err instanceof Error ? err.message : 'API health check failed.');
+    } finally {
+      setCheckingHealth(false);
+    }
+  }
+
+  const checks = [
+    {
+      label: 'Current deployed tags',
+      value: 'Web v51 / API v33 after this deploy',
+      tone: 'info',
+    },
+    {
+      label: 'Backup reminder',
+      value: 'Use Backup / Export tools before big edits, imports or public launch work.',
+      tone: 'ok',
+    },
+    {
+      label: 'Default admin password',
+      value: 'Change admin@propmanager.local / ChangeMe123! before sharing or public use.',
+      tone: 'warn',
+    },
+    {
+      label: 'JWT secret',
+      value: 'Use a long unique JWT_SECRET in TrueNAS before exposing the app outside your network.',
+      tone: 'warn',
+    },
+    {
+      label: 'Restore/import safety',
+      value: 'Exports are enabled. Restore/import is intentionally not enabled yet.',
+      tone: 'ok',
+    },
+  ];
+
+  function toneClasses(tone: string) {
+    if (tone === 'ok') return 'border-emerald-200 bg-emerald-50 text-emerald-800';
+    if (tone === 'warn') return 'border-amber-200 bg-amber-50 text-amber-800';
+    return 'border-blue-200 bg-blue-50 text-blue-800';
+  }
+
+  return (
+    <Card title="Admin safety checks">
+      <div className="space-y-4">
+        <div className="flex flex-col justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 md:flex-row md:items-center">
+          <div>
+            <p className="font-semibold text-slate-900">API health</p>
+            <p className={healthStatus === 'ok' ? 'text-emerald-700' : healthStatus === 'error' ? 'text-rose-700' : 'text-slate-600'}>{healthMessage}</p>
+          </div>
+          <Button variant="secondary" disabled={checkingHealth} onClick={() => void checkHealth()}>
+            {checkingHealth ? 'Checking...' : 'Check API health'}
+          </Button>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2">
+          {checks.map(check => (
+            <div key={check.label} className={'rounded-lg border p-3 text-sm ' + toneClasses(check.tone)}>
+              <p className="font-semibold">{check.label}</p>
+              <p className="mt-1">{check.value}</p>
+            </div>
+          ))}
+        </div>
+        <p className="text-xs text-slate-500">These checks are reminders only. They do not change settings or expose secrets.</p>
+      </div>
+    </Card>
+  );
+}
+
 function BackupExportTools() {
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState('');
@@ -2147,6 +2234,7 @@ function Admin({ data }: { data: DashboardData; refresh: () => Promise<void> }) 
 
   return (
     <div className="space-y-8">
+      <AdminSafetyChecks />
       <BackupExportTools />
       <TrashBin />
 
