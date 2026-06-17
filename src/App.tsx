@@ -545,9 +545,12 @@ function Properties({ data, refresh }: { data: DashboardData; refresh: () => Pro
     await refresh();
   }
 
-  async function remove(id: string) {
-    await api.deleteProperty(id);
+  async function remove(property: Property) {
+    const confirmed = window.confirm('Are you sure you want to delete property "' + property.address + '"? This cannot currently be undone.');
+    if (!confirmed) return;
+    await api.deleteProperty(property.id);
     await refresh();
+    window.alert('Deleted property "' + property.address + '".');
   }
 
   return (
@@ -572,7 +575,7 @@ function Properties({ data, refresh }: { data: DashboardData; refresh: () => Pro
           property.postcode,
           property.status,
           money(property.monthly_rent),
-          <Actions onEdit={() => startEdit(property)} onDelete={() => remove(property.id)} />,
+          <Actions onEdit={() => startEdit(property)} onDelete={() => remove(property)} />,
         ])}
       />
     </CrudLayout>
@@ -750,10 +753,13 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
     await refresh();
   }
 
-  async function remove(id: string) {
-    await api.deleteTenant(id);
+  async function remove(tenant: Tenant) {
+    const confirmed = window.confirm('Are you sure you want to delete tenant "' + tenant.name + '"? This cannot currently be undone.');
+    if (!confirmed) return;
+    await api.deleteTenant(tenant.id);
     await refresh();
     await loadTenantAgreements();
+    window.alert('Deleted tenant "' + tenant.name + '".');
   }
 
   async function createAgreement(tenant: Tenant) {
@@ -1019,7 +1025,7 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
             {agreementNotice && <div className="text-xs text-emerald-700">{agreementNotice}</div>}
             {agreementError && <div className="text-xs text-rose-600">{agreementError}</div>}
           </div>,
-          <Actions onEdit={() => startEdit(tenant)} onDelete={() => remove(tenant.id)} />,
+          <Actions onEdit={() => startEdit(tenant)} onDelete={() => remove(tenant)} />,
         ])}
       />
     </CrudLayout>
@@ -1051,9 +1057,13 @@ function Rent({ data, refresh, user }: { data: DashboardData; refresh: () => Pro
     await refresh();
   }
 
-  async function remove(id: string) {
-    await api.deleteRentPayment(id);
+  async function remove(payment: RentPayment) {
+    const label = (payment.tenant?.name || 'tenant') + ' rent payment due ' + (dateOnly(payment.due_date) || 'unknown date');
+    const confirmed = window.confirm('Are you sure you want to delete ' + label + '? This cannot currently be undone.');
+    if (!confirmed) return;
+    await api.deleteRentPayment(payment.id);
     await refresh();
+    window.alert('Deleted ' + label + '.');
   }
 
   return (
@@ -1086,7 +1096,7 @@ function Rent({ data, refresh, user }: { data: DashboardData; refresh: () => Pro
           dateOnly(payment.due_date),
           dateOnly(payment.paid_date) || '-',
           payment.status,
-          user.role === 'admin' ? <Actions onEdit={() => startEdit(payment)} onDelete={() => remove(payment.id)} /> : '-',
+          user.role === 'admin' ? <Actions onEdit={() => startEdit(payment)} onDelete={() => remove(payment)} /> : '-',
         ])}
       />
     </div>
@@ -1209,10 +1219,12 @@ function Maintenance({ data, refresh, user }: { data: DashboardData; refresh: ()
     await refresh();
   }
 
-  async function deleteTicket(id: string) {
-    if (!confirm('Delete this repair ticket?')) return;
-    await api.deleteMaintenanceTicket(id);
+  async function deleteTicket(ticket: MaintenanceTicket) {
+    const confirmed = window.confirm('Are you sure you want to delete repair ticket "' + ticket.title + '"? This cannot currently be undone.');
+    if (!confirmed) return;
+    await api.deleteMaintenanceTicket(ticket.id);
     await refresh();
+    window.alert('Deleted repair ticket "' + ticket.title + '".');
   }
 
   return (
@@ -1320,7 +1332,7 @@ function Maintenance({ data, refresh, user }: { data: DashboardData; refresh: ()
             ticket.urgency,
             ticket.status,
             dateOnly(ticket.created_at),
-            <Actions onEdit={() => startEdit(ticket)} onDelete={() => deleteTicket(ticket.id)} />,
+            <Actions onEdit={() => startEdit(ticket)} onDelete={() => deleteTicket(ticket)} />,
           ];
         })}
       />
@@ -1472,17 +1484,18 @@ function Documents({ data, refresh, user }: { data: DashboardData; refresh: () =
     }
   }
 
-  async function remove(id: string) {
-    const confirmed = window.confirm('Delete this document record? This removes it from PropManagerr and tenants will no longer see it.');
+  async function remove(document: DocumentRecord) {
+    const confirmed = window.confirm('Are you sure you want to delete document "' + document.name + '"? Tenants will no longer see it. This cannot currently be undone.');
     if (!confirmed) return;
 
     setDocumentError('');
-    setDeletingDocumentId(id);
+    setDeletingDocumentId(document.id);
 
     try {
-      await api.deleteDocument(id);
-      if (editing?.id === id) reset();
+      await api.deleteDocument(document.id);
+      if (editing?.id === document.id) reset();
       await refresh();
+      window.alert('Deleted document "' + document.name + '".');
     } catch (err) {
       setDocumentError(err instanceof Error ? err.message : 'Could not delete document');
     } finally {
@@ -1563,7 +1576,7 @@ function Documents({ data, refresh, user }: { data: DashboardData; refresh: () =
           user.role === 'admin' ? (
             <div className="flex gap-2">
               <Button variant="secondary" onClick={() => startEdit(document)}>Edit</Button>
-              <Button variant="danger" disabled={deletingDocumentId === document.id} onClick={() => remove(document.id)}>
+              <Button variant="danger" disabled={deletingDocumentId === document.id} onClick={() => remove(document)}>
                 {deletingDocumentId === document.id ? 'Deleting...' : 'Delete'}
               </Button>
             </div>
@@ -1659,12 +1672,14 @@ function Expenses({ data, refresh }: { data: DashboardData; refresh: () => Promi
     }
   }
 
-  async function remove(id: string) {
-    if (!window.confirm('Delete this expense record?')) return;
+  async function remove(expense: Expense) {
+    const label = expense.description || expense.category || 'expense record';
+    if (!window.confirm('Are you sure you want to delete expense "' + label + '"? This cannot currently be undone.')) return;
     setFormError('');
     try {
-      await api.deleteExpense(id);
+      await api.deleteExpense(expense.id);
       await refresh();
+      window.alert('Deleted expense "' + label + '".');
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Could not delete expense');
     }
@@ -1759,7 +1774,7 @@ function Expenses({ data, refresh }: { data: DashboardData; refresh: () => Promi
           expense.category,
           expense.description || '-',
           money(expense.amount),
-          <Actions onEdit={() => startEdit(expense)} onDelete={() => remove(expense.id)} />,
+          <Actions onEdit={() => startEdit(expense)} onDelete={() => remove(expense)} />,
         ])}
       />
     </div>
