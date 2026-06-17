@@ -862,6 +862,27 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
     }
   }
 
+
+  async function checkDocuSignSignedCopy(agreement: any) {
+    setSavingAgreementId(agreement.id);
+    setAgreementError('');
+    setAgreementNotice('');
+    try {
+      const result = await api.completeTenancyAgreementFromDocuSign(agreement.id);
+      if (result.completed) {
+        setAgreementNotice('Signed DocuSign document downloaded, saved to Documents and agreement marked as signed.');
+        setPreviewAgreement(null);
+        await Promise.all([loadTenantAgreements(), refresh()]);
+      } else {
+        setAgreementNotice('DocuSign envelope status: ' + (result.envelope_status || 'not completed') + '. Try again after the tenant has signed.');
+      }
+    } catch (err) {
+      setAgreementError(err instanceof Error ? err.message : 'Could not check DocuSign signed copy');
+    } finally {
+      setSavingAgreementId(null);
+    }
+  }
+
   async function saveAgreementAsDocument(agreement: any) {
     const confirmed = window.confirm('Save this tenancy agreement as a tenant document? This creates a Documents record and stores the current wording as the saved agreement file.');
     if (!confirmed) return;
@@ -980,6 +1001,11 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
               <Button variant="primary" disabled={savingAgreementId === agreement.id || agreement.status === 'signed'} onClick={() => void prepareSendForSigning(agreement)}>
                 {agreement.docusign_envelope_id ? 'Sent via DocuSign' : agreement.status === 'sent' ? 'Sent manually' : 'Send via DocuSign'}
               </Button>
+              {agreement.docusign_envelope_id && agreement.status !== 'signed' && (
+                <Button variant="secondary" disabled={savingAgreementId === agreement.id} onClick={() => void checkDocuSignSignedCopy(agreement)}>
+                  {savingAgreementId === agreement.id ? 'Checking...' : 'Check signed DocuSign copy'}
+                </Button>
+              )}
               <Button variant="secondary" disabled={savingAgreementId === agreement.id} onClick={() => void saveAgreementAsDocument(agreement)}>
                 {savingAgreementId === agreement.id ? 'Saving doc...' : agreement.signed_document_url ? 'Saved to Docs' : 'Save as document'}
               </Button>
@@ -1038,6 +1064,11 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
                 <Button variant="primary" disabled={savingAgreementId === previewAgreement.id || previewAgreement.status === 'signed'} onClick={() => void prepareSendForSigning(previewAgreement)}>
                   {previewAgreement.docusign_envelope_id ? 'Sent via DocuSign' : previewAgreement.status === 'sent' ? 'Sent manually' : 'Send via DocuSign'}
                 </Button>
+                {previewAgreement.docusign_envelope_id && previewAgreement.status !== 'signed' && (
+                  <Button variant="secondary" disabled={savingAgreementId === previewAgreement.id} onClick={() => void checkDocuSignSignedCopy(previewAgreement)}>
+                    {savingAgreementId === previewAgreement.id ? 'Checking...' : 'Check signed DocuSign copy'}
+                  </Button>
+                )}
                 <Button variant="secondary" disabled={savingAgreementId === previewAgreement.id} onClick={() => void saveAgreementAsDocument(previewAgreement)}>
                   {savingAgreementId === previewAgreement.id ? 'Saving doc...' : previewAgreement.signed_document_url ? 'Saved to Docs' : 'Save as document'}
                 </Button>

@@ -868,6 +868,106 @@ app.post('/tenancy-agreements/:id/docusign/send', requireAuth, requireAdmin, asy
   });
 });
 
+
+app.post('/tenancy-agreements/:id/docusign/complete', requireAuth, requireAdmin, async (req, res) => {
+  const status = docusignConfigStatus();
+  if (!status.ready) {
+    return res.status(400).json({
+      error: 'DocuSign is not configured',
+      missing: status.missing,
+    });
+  }
+
+  const { rows } = await query(
+    `select a.*, row_to_json(t.*) as tenant, row_to_json(p.*) as property
+     from tenancy_agreements a
+     left join tenants t on t.id=a.tenant_id
+     left join properties p on p.id=a.property_id
+     where a.id=$1`,
+    [req.params.id]
+  );
+
+  const agreement = rows[0];
+  if (!agreement) return res.status(404).json({ error: 'Tenancy agreement not found' });
+  if (!agreement.docusign_envelope_id) return res.status(400).json({ error: 'No DocuSign envelope ID is stored for this agreement' });
+
+  const accessToken = await docusignAccessToken(status.config);
+  const envelopeId = agreement.docusign_envelope_id;
+  const envelopeUrl = status.config.baseUrl + '/restapi/v2.1/accounts/' + status.config.accountId + '/envelopes/' + encodeURIComponent(envelopeId);
+
+  const envelopeResponse = await fetch(envelopeUrl, {
+    headers: { Authorization: 'Bearer ' + accessToken },
+  });
+  const envelopeJson = await envelopeResponse.json().catch(() => ({}));
+  if (!envelopeResponse.ok) {
+    const detail = envelopeJson.message || envelopeJson.error || 'DocuSign envelope status check failed';
+    throw new Error(detail);
+  }
+
+  const envelopeStatus = String(envelopeJson.status || '').toLowerCase();
+  if (envelopeStatus !== 'completed') {
+    return res.json({
+      completed: false,
+      envelope_status: envelopeJson.status || envelopeStatus || 'unknown',
+      message: 'DocuSign envelope is not completed yet',
+    });
+  }
+
+  const documentResponse = await fetch(envelopeUrl + '/documents/combined', {
+    headers: {
+      Authorization: 'Bearer ' + accessToken,
+      Accept: 'application/pdf',
+    },
+  });
+  if (!documentResponse.ok) {
+    let detail = 'Could not download signed DocuSign document';
+    try {
+      const errorJson = await documentResponse.json();
+      detail = errorJson.message || errorJson.error || detail;
+    } catch {}
+    throw new Error(detail);
+  }
+
+  const signedBuffer = Buffer.from(await documentResponse.arrayBuffer());
+  const safeEnvelopeId = envelopeId.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80) || 'envelope';
+  const fileName = 'signed-tenancy-agreement-' + safeEnvelopeId + '-' + Date.now() + '.pdf';
+  const documentsDir = new URL('../uploads/documents/', import.meta.url);
+  await fs.mkdir(documentsDir, { recursive: true });
+  await fs.writeFile(new URL(fileName, documentsDir), signedBuffer);
+  const fileUrl = '/uploads/documents/' + fileName;
+
+  const title = (agreement.agreement_title || 'Tenancy Agreement') + ' - signed DocuSign copy';
+  const documentResult = await query(
+    `insert into documents (property_id, tenant_id, name, doc_type, file_url)
+     values ($1, $2, $3, $4, $5)
+     returning *`,
+    [agreement.property_id || null, agreement.tenant_id || null, title, 'tenancy_agreement', fileUrl]
+  );
+
+  const updated = await query(
+    `update tenancy_agreements
+     set status='signed',
+         signed_at=coalesce(signed_at, now()),
+         signed_document_url=$2,
+         notes=$3,
+         updated_at=now()
+     where id=$1
+     returning *`,
+    [
+      agreement.id,
+      fileUrl,
+      'Signed DocuSign document downloaded and saved to Documents.',
+    ]
+  );
+
+  res.json({
+    completed: true,
+    envelope_status: envelopeJson.status || 'completed',
+    document: documentResult.rows[0],
+    agreement: updated.rows[0],
+  });
+});
+
 app.get('/tenancy-agreements', requireAuth, requireAdmin, async (req, res) => {
   const tenantId = req.query.tenant_id ? String(req.query.tenant_id) : '';
   const params = tenantId ? [tenantId] : [];

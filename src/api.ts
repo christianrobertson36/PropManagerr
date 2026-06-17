@@ -292,6 +292,11 @@ export const api = {
       method: 'POST',
     }),
 
+  completeTenancyAgreementFromDocuSign: (id: string) =>
+    request<{ completed: boolean; envelope_status?: string; message?: string; document?: DocumentRecord; agreement?: TenancyAgreement }>('/tenancy-agreements/' + id + '/docusign/complete', {
+      method: 'POST',
+    }),
+
   adminExport: () => request<Record<string, any>>('/admin/export'),
 
   listTrash: () => request<DeletedRecord[]>('/trash'),
