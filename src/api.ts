@@ -275,6 +275,12 @@ export const api = {
       method: 'POST',
     }),
 
+  restoreDeletedRecord: (table: string, id: string) =>
+    request('/trash/restore', {
+      method: 'POST',
+      body: JSON.stringify({ table, id }),
+    }),
+
   createProperty: (property: PropertyPayload) =>
     request('/properties', {
       method: 'POST',

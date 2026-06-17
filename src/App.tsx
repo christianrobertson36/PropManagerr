@@ -550,7 +550,7 @@ function Properties({ data, refresh }: { data: DashboardData; refresh: () => Pro
     if (!confirmed) return;
     await api.deleteProperty(property.id);
     await refresh();
-    window.alert('Deleted property "' + property.address + '".');
+    await offerUndoDelete('property "' + property.address + '"', 'properties', property.id, refresh);
   }
 
   return (
@@ -690,6 +690,20 @@ function printAgreementText(agreement: any) {
   printWindow.print();
 }
 
+
+async function offerUndoDelete(label: string, table: string, id: string, refreshAfter: () => Promise<void>) {
+  const undo = window.confirm('Deleted ' + label + '.\n\nUndo delete now?');
+  if (!undo) return;
+
+  try {
+    await api.restoreDeletedRecord(table, id);
+    await refreshAfter();
+    window.alert('Restored ' + label + '.');
+  } catch (err) {
+    window.alert(err instanceof Error ? 'Could not restore: ' + err.message : 'Could not restore deleted record.');
+  }
+}
+
 function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promise<void> }) {
   const [editing, setEditing] = useState<Tenant | null>(null);
   const [form, setForm] = useState<TenantPayload>({ property_id: '', name: '', email: '', phone: '', lease_start: null, lease_end: null, payment_status: 'pending' });
@@ -759,7 +773,10 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
     await api.deleteTenant(tenant.id);
     await refresh();
     await loadTenantAgreements();
-    window.alert('Deleted tenant "' + tenant.name + '".');
+    await offerUndoDelete('tenant "' + tenant.name + '"', 'tenants', tenant.id, async () => {
+      await refresh();
+      await loadTenantAgreements();
+    });
   }
 
   async function createAgreement(tenant: Tenant) {
@@ -1063,7 +1080,7 @@ function Rent({ data, refresh, user }: { data: DashboardData; refresh: () => Pro
     if (!confirmed) return;
     await api.deleteRentPayment(payment.id);
     await refresh();
-    window.alert('Deleted ' + label + '.');
+    await offerUndoDelete(label, 'rent_payments', payment.id, refresh);
   }
 
   return (
@@ -1224,7 +1241,7 @@ function Maintenance({ data, refresh, user }: { data: DashboardData; refresh: ()
     if (!confirmed) return;
     await api.deleteMaintenanceTicket(ticket.id);
     await refresh();
-    window.alert('Deleted repair ticket "' + ticket.title + '".');
+    await offerUndoDelete('repair ticket "' + ticket.title + '"', 'maintenance_tickets', ticket.id, refresh);
   }
 
   return (
@@ -1495,7 +1512,7 @@ function Documents({ data, refresh, user }: { data: DashboardData; refresh: () =
       await api.deleteDocument(document.id);
       if (editing?.id === document.id) reset();
       await refresh();
-      window.alert('Deleted document "' + document.name + '".');
+      await offerUndoDelete('document "' + document.name + '"', 'documents', document.id, refresh);
     } catch (err) {
       setDocumentError(err instanceof Error ? err.message : 'Could not delete document');
     } finally {
@@ -1679,7 +1696,7 @@ function Expenses({ data, refresh }: { data: DashboardData; refresh: () => Promi
     try {
       await api.deleteExpense(expense.id);
       await refresh();
-      window.alert('Deleted expense "' + label + '".');
+      await offerUndoDelete('expense "' + label + '"', 'expenses', expense.id, refresh);
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Could not delete expense');
     }

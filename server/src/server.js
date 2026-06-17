@@ -48,7 +48,7 @@ const sendOneOr404 = (res, rows, name = 'Record') => {
 async function resolveTenantAccountLink(user) {
   if (!user || user.role !== 'tenant' || user.tenant_id) return user;
 
-  const { rows } = await query('select id from tenants where lower(email)=lower($1) limit 1', [user.email]);
+  const { rows } = await query('select id from tenants where lower(email)=lower($1) and deleted_at is null limit 1', [user.email]);
   const tenant = rows[0];
   if (!tenant) return user;
 
@@ -74,9 +74,17 @@ const makeId = () => {
   return `id_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 };
 
+const softDeleteTables = new Set(['properties', 'tenants', 'rent_payments', 'maintenance_tickets', 'documents', 'expenses']);
+
+function activeWhere(alias = '') {
+  const prefix = alias ? `${alias}.` : '';
+  return `${prefix}deleted_at is null`;
+}
+
 const adminCrud = (path, table, fields, name) => {
   app.get(path, requireAuth, requireAdmin, async (_req, res) => {
-    const { rows } = await query(`select * from ${table} order by created_at desc`);
+    const where = softDeleteTables.has(table) ? ' where deleted_at is null' : '';
+    const { rows } = await query(`select * from ${table}${where} order by created_at desc`);
     res.json(rows);
   });
   app.post(path, requireAuth, requireAdmin, async (req, res) => {
@@ -93,15 +101,33 @@ const adminCrud = (path, table, fields, name) => {
 
     const setSql = updates.map((field, index) => `${field}=$${index + 2}`).join(', ');
     const values = updates.map((field) => req.body[field]);
-    const { rows } = await query(`update ${table} set ${setSql} where id=$1 returning *`, [req.params.id, ...values]);
+    const activeFilter = softDeleteTables.has(table) ? ' and deleted_at is null' : '';
+    const { rows } = await query(`update ${table} set ${setSql} where id=$1${activeFilter} returning *`, [req.params.id, ...values]);
     sendOneOr404(res, rows, name);
   });
 
   app.delete(`${path}/:id`, requireAuth, requireAdmin, async (req, res) => {
+    if (softDeleteTables.has(table)) {
+      const { rows } = await query(`update ${table} set deleted_at=now() where id=$1 and deleted_at is null returning *`, [req.params.id]);
+      return sendOneOr404(res, rows, name);
+    }
+
     const { rows } = await query(`delete from ${table} where id=$1 returning *`, [req.params.id]);
     sendOneOr404(res, rows, name);
   });
 };
+
+app.post('/trash/restore', requireAuth, requireAdmin, async (req, res) => {
+  const table = String(req.body?.table || '').trim();
+  const id = String(req.body?.id || '').trim();
+
+  if (!softDeleteTables.has(table)) return res.status(400).json({ error: 'Unsupported restore table' });
+  if (!id) return res.status(400).json({ error: 'Restore id is required' });
+
+  const { rows } = await query(`update ${table} set deleted_at=null where id=$1 returning *`, [id]);
+  sendOneOr404(res, rows, 'Deleted record');
+});
+
 
 
 function normaliseLicenseKey(value) {
@@ -453,18 +479,18 @@ app.get('/dashboard', requireAuth, async (req, res) => {
     });
   }
 
-  const propertyWhere = isAdmin ? '' : ' where p.id in (select property_id from tenants where id=$1)';
-  const tenantWhere = isAdmin ? '' : ' where t.id=$1';
-  const rentWhere = isAdmin ? '' : ' where r.tenant_id=$1';
+  const propertyWhere = isAdmin ? ' where p.deleted_at is null' : ' where p.deleted_at is null and p.id in (select property_id from tenants where id=$1 and deleted_at is null)';
+  const tenantWhere = isAdmin ? ' where t.deleted_at is null' : ' where t.id=$1 and t.deleted_at is null';
+  const rentWhere = isAdmin ? ' where r.deleted_at is null' : ' where r.deleted_at is null and r.tenant_id=$1';
   const maintWhere = isAdmin
-    ? ''
-    : ' where m.tenant_id=$1 or m.property_id in (select property_id from tenants where id=$1)';
+    ? ' where m.deleted_at is null'
+    : ' where m.deleted_at is null and (m.tenant_id=$1 or m.property_id in (select property_id from tenants where id=$1 and deleted_at is null))';
   const docWhere = isAdmin
-    ? ''
-    : ` where d.tenant_id=$1
-        or d.property_id in (select property_id from tenants where id=$1)
-        or (d.tenant_id is null and d.property_id is null)`;
-  const expenseWhere = isAdmin ? '' : ' where false';
+    ? ' where d.deleted_at is null'
+    : ` where d.deleted_at is null and (d.tenant_id=$1
+        or d.property_id in (select property_id from tenants where id=$1 and deleted_at is null)
+        or (d.tenant_id is null and d.property_id is null))`;
+  const expenseWhere = isAdmin ? ' where e.deleted_at is null' : ' where false';
   const expenseParams = isAdmin ? [] : [];
 
   const [properties, tenants, rentPayments, maintenanceTickets, documents, expenses] = await Promise.all([
@@ -472,7 +498,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
     query(
       `select t.*, row_to_json(p.*) as property
        from tenants t
-       left join properties p on p.id=t.property_id
+       left join properties p on p.id=t.property_id and p.deleted_at is null
        ${tenantWhere}
        order by t.name`,
       tenantParams
@@ -480,8 +506,8 @@ app.get('/dashboard', requireAuth, async (req, res) => {
     query(
       `select r.*, row_to_json(t.*) as tenant, row_to_json(p.*) as property
        from rent_payments r
-       left join tenants t on t.id=r.tenant_id
-       left join properties p on p.id=r.property_id
+       left join tenants t on t.id=r.tenant_id and t.deleted_at is null
+       left join properties p on p.id=r.property_id and p.deleted_at is null
        ${rentWhere}
        order by r.due_date desc`,
       tenantParams
@@ -489,8 +515,8 @@ app.get('/dashboard', requireAuth, async (req, res) => {
     query(
       `select m.*, row_to_json(p.*) as property, row_to_json(t.*) as tenant
        from maintenance_tickets m
-       left join properties p on p.id=m.property_id
-       left join tenants t on t.id=m.tenant_id
+       left join properties p on p.id=m.property_id and p.deleted_at is null
+       left join tenants t on t.id=m.tenant_id and t.deleted_at is null
        ${maintWhere}
        order by m.created_at desc`,
       tenantParams
@@ -498,8 +524,8 @@ app.get('/dashboard', requireAuth, async (req, res) => {
     query(
       `select d.*, row_to_json(p.*) as property, row_to_json(t.*) as tenant
        from documents d
-       left join properties p on p.id=d.property_id
-       left join tenants t on t.id=d.tenant_id
+       left join properties p on p.id=d.property_id and p.deleted_at is null
+       left join tenants t on t.id=d.tenant_id and t.deleted_at is null
        ${docWhere}
        order by d.expiry_date nulls last`,
       tenantParams
@@ -507,7 +533,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
     query(
       `select e.*, row_to_json(p.*) as property
        from expenses e
-       left join properties p on p.id=e.property_id
+       left join properties p on p.id=e.property_id and p.deleted_at is null
        ${expenseWhere}
        order by e.date desc`,
       expenseParams
@@ -577,7 +603,7 @@ app.post('/maintenance', requireAuth, async (req, res) => {
 
   const currentUser = await resolveTenantAccountLink(req.user);
   if (currentUser.role !== 'admin') {
-    const allowed = await query('select 1 from tenants where id=$1 and property_id=$2', [currentUser.tenant_id, property_id]);
+    const allowed = await query('select 1 from tenants where id=$1 and property_id=$2 and deleted_at is null', [currentUser.tenant_id, property_id]);
     if (!allowed.rows[0]) return res.status(403).json({ error: 'Cannot create ticket for another property' });
   }
 
@@ -615,8 +641,8 @@ app.post('/tenancy-agreements', requireAuth, requireAdmin, async (req, res) => {
   const tenantResult = await query(
     `select t.*, p.address as property_address, p.postcode as property_postcode, p.monthly_rent
      from tenants t
-     left join properties p on p.id=t.property_id
-     where t.id=$1`,
+     left join properties p on p.id=t.property_id and p.deleted_at is null
+     where t.id=$1 and t.deleted_at is null`,
     [tenantId]
   );
   const tenant = tenantResult.rows[0];
@@ -736,7 +762,7 @@ async function normaliseDocumentPayload(body) {
   let propertyId = body.property_id || null;
 
   if (tenantId && !propertyId) {
-    const { rows } = await query('select property_id from tenants where id=$1', [tenantId]);
+    const { rows } = await query('select property_id from tenants where id=$1 and deleted_at is null', [tenantId]);
     propertyId = rows[0]?.property_id || null;
   }
 
@@ -754,8 +780,9 @@ app.get('/documents', requireAuth, requireAdmin, async (_req, res) => {
   const { rows } = await query(`
     select d.*, p.address as property, t.name as tenant
     from documents d
-    left join properties p on p.id=d.property_id
-    left join tenants t on t.id=d.tenant_id
+    left join properties p on p.id=d.property_id and p.deleted_at is null
+    left join tenants t on t.id=d.tenant_id and t.deleted_at is null
+    where d.deleted_at is null
     order by d.created_at desc
   `);
   res.json(rows);
@@ -788,16 +815,9 @@ app.patch('/documents/:id', requireAuth, requireAdmin, async (req, res) => {
 });
 
 app.delete('/documents/:id', requireAuth, requireAdmin, async (req, res) => {
-  const { rows } = await query('delete from documents where id=$1 returning *', [req.params.id]);
+  const { rows } = await query('update documents set deleted_at=now() where id=$1 and deleted_at is null returning *', [req.params.id]);
   const deleted = rows[0];
   if (!deleted) return res.status(404).json({ error: 'Document not found' });
-
-  if (deleted.file_url && deleted.file_url.startsWith('/uploads/documents/')) {
-    const filename = deleted.file_url.replace('/uploads/documents/', '');
-    if (filename && !filename.includes('/') && !filename.includes('..')) {
-      await fs.unlink(`${documentUploadDir}/${filename}`).catch(() => undefined);
-    }
-  }
 
   return res.json(deleted);
 });
@@ -810,6 +830,12 @@ app.post('/documents/upload', requireAuth, requireAdmin, uploadDocumentFile, (re
 adminCrud('/expenses', 'expenses', ['property_id', 'date', 'category', 'description', 'amount', 'supplier', 'receipt_url', 'notes'], 'Expense');
 
 async function applyRuntimeMigrations() {
+
+  // Soft delete / undo support.
+  for (const table of ['properties', 'tenants', 'rent_payments', 'maintenance_tickets', 'documents', 'expenses']) {
+    await query(`alter table ${table} add column if not exists deleted_at timestamptz`);
+  }
+
 
   // Tenancy agreement versioning foundation.
   await query(`
