@@ -117,6 +117,31 @@ const adminCrud = (path, table, fields, name) => {
   });
 };
 
+app.get('/admin/export', requireAuth, requireAdmin, async (_req, res) => {
+  const exportQueries = {
+    properties: 'select * from properties where deleted_at is null order by created_at desc',
+    tenants: 'select * from tenants where deleted_at is null order by created_at desc',
+    rent_payments: 'select * from rent_payments where deleted_at is null order by created_at desc',
+    maintenance_tickets: 'select * from maintenance_tickets where deleted_at is null order by created_at desc',
+    documents: 'select * from documents where deleted_at is null order by created_at desc',
+    expenses: 'select * from expenses where deleted_at is null order by created_at desc',
+    tenancy_agreements: 'select * from tenancy_agreements order by created_at desc',
+  };
+
+  const tables = {};
+  for (const [name, sql] of Object.entries(exportQueries)) {
+    const { rows } = await query(sql);
+    tables[name] = rows;
+  }
+
+  res.json({
+    app: 'PropManagerr',
+    export_type: 'admin_backup_export',
+    exported_at: new Date().toISOString(),
+    tables,
+  });
+});
+
 app.get('/trash', requireAuth, requireAdmin, async (_req, res) => {
   const tables = ['properties', 'tenants', 'rent_payments', 'maintenance_tickets', 'documents', 'expenses'];
   const records = [];

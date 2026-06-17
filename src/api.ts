@@ -283,6 +283,8 @@ export const api = {
       method: 'POST',
     }),
 
+  adminExport: () => request<Record<string, any>>('/admin/export'),
+
   listTrash: () => request<DeletedRecord[]>('/trash'),
 
   restoreDeletedRecord: (table: string, id: string) =>

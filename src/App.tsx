@@ -1928,6 +1928,93 @@ function LicenceManagement() {
   );
 }
 
+function BackupExportTools() {
+  const [exporting, setExporting] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+
+  function downloadFile(filename: string, content: string, type: string) {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function csvValue(value: unknown) {
+    if (value === null || value === undefined) return '';
+    const text = typeof value === 'object' ? JSON.stringify(value) : String(value);
+    return '"' + text.replace(/"/g, '""') + '"';
+  }
+
+  function rowsToCsv(rows: any[]) {
+    if (!rows.length) return '';
+    const columns = Array.from(new Set(rows.flatMap(row => Object.keys(row || {}))));
+    return [columns.join(','), ...rows.map(row => columns.map(column => csvValue(row?.[column])).join(','))].join('\n');
+  }
+
+  async function downloadJsonExport() {
+    setExporting(true);
+    setError('');
+    setNotice('');
+    try {
+      const backup = await api.adminExport();
+      const date = new Date().toISOString().slice(0, 10);
+      downloadFile('propmanagerr-backup-' + date + '.json', JSON.stringify(backup, null, 2), 'application/json;charset=utf-8');
+      setNotice('JSON backup exported. Store it somewhere safe.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not export backup');
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function downloadCsvExport() {
+    setExporting(true);
+    setError('');
+    setNotice('');
+    try {
+      const backup: any = await api.adminExport();
+      const tables = backup.tables || {};
+      const date = new Date().toISOString().slice(0, 10);
+      const content = Object.entries(tables)
+        .map(([name, rows]) => '# ' + name + '\n' + rowsToCsv(Array.isArray(rows) ? rows : []))
+        .join('\n\n');
+      downloadFile('propmanagerr-export-' + date + '.csv', content, 'text/csv;charset=utf-8');
+      setNotice('CSV export downloaded. JSON is best for full backup; CSV is best for viewing.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not export CSV');
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  return (
+    <Card title="Backup / Export tools">
+      <div className="space-y-4">
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+          Export a read-only backup of properties, tenants, rent, repairs, documents, expenses and tenancy agreements before making bigger changes.
+        </div>
+        {error && <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
+        {notice && <p className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">{notice}</p>}
+        <div className="flex flex-wrap gap-2">
+          <Button disabled={exporting} onClick={() => void downloadJsonExport()}>
+            {exporting ? 'Exporting...' : 'Download JSON backup'}
+          </Button>
+          <Button variant="secondary" disabled={exporting} onClick={() => void downloadCsvExport()}>
+            Download CSV view
+          </Button>
+        </div>
+        <p className="text-xs text-slate-500">Restore/import is intentionally not enabled yet. This is export-only for safety.</p>
+      </div>
+    </Card>
+  );
+}
+
 function TrashBin() {
   const [records, setRecords] = useState<DeletedRecord[]>([]);
   const [loading, setLoading] = useState(false);
@@ -2060,6 +2147,7 @@ function Admin({ data }: { data: DashboardData; refresh: () => Promise<void> }) 
 
   return (
     <div className="space-y-8">
+      <BackupExportTools />
       <TrashBin />
 
       <CrudLayout title={editing ? 'Edit login account' : 'Add login account'} onSubmit={submit} onCancel={reset} editing={Boolean(editing)}>
