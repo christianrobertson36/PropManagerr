@@ -68,6 +68,12 @@ function uploadDocumentFile(req, res, next) {
   });
 }
 
+
+const makeId = () => {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  return `id_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+};
+
 const adminCrud = (path, table, fields, name) => {
   app.get(path, requireAuth, requireAdmin, async (_req, res) => {
     const { rows } = await query(`select * from ${table} order by created_at desc`);
@@ -584,6 +590,99 @@ app.post('/maintenance', requireAuth, async (req, res) => {
   res.status(201).json(rows[0]);
 });
 
+
+app.get('/tenancy-agreements', requireAuth, requireAdmin, async (req, res) => {
+  const tenantId = req.query.tenant_id ? String(req.query.tenant_id) : '';
+  const params = tenantId ? [tenantId] : [];
+  const where = tenantId ? 'where a.tenant_id=$1' : '';
+
+  const { rows } = await query(
+    `select a.*, row_to_json(t.*) as tenant, row_to_json(p.*) as property
+     from tenancy_agreements a
+     left join tenants t on t.id=a.tenant_id
+     left join properties p on p.id=a.property_id
+     ${where}
+     order by a.created_at desc`,
+    params
+  );
+  res.json(rows);
+});
+
+app.post('/tenancy-agreements', requireAuth, requireAdmin, async (req, res) => {
+  const tenantId = req.body?.tenant_id;
+  if (!tenantId) return res.status(400).json({ error: 'Tenant is required' });
+
+  const tenantResult = await query(
+    `select t.*, p.address as property_address, p.postcode as property_postcode, p.monthly_rent
+     from tenants t
+     left join properties p on p.id=t.property_id
+     where t.id=$1`,
+    [tenantId]
+  );
+  const tenant = tenantResult.rows[0];
+  if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
+
+  const versionResult = await query('select coalesce(max(agreement_version), 0) + 1 as next_version from tenancy_agreements where tenant_id=$1', [tenantId]);
+  const nextVersion = Number(versionResult.rows[0]?.next_version || 1);
+
+  const id = makeId();
+  const { rows } = await query(
+    `insert into tenancy_agreements (
+       id, tenant_id, property_id, agreement_version, agreement_title, status,
+       landlord_name, landlord_signed, tenant_name_snapshot, property_address_snapshot,
+       property_postcode_snapshot, rent_snapshot, lease_start_snapshot, lease_end_snapshot,
+       agreement_body, notes
+     ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+     returning *`,
+    [
+      id,
+      tenant.id,
+      tenant.property_id || null,
+      nextVersion,
+      req.body?.agreement_title || 'Tenancy Agreement',
+      req.body?.status || 'draft',
+      req.body?.landlord_name || 'Lee Robertson',
+      req.body?.landlord_signed !== false,
+      tenant.name,
+      tenant.property_address || null,
+      tenant.property_postcode || null,
+      tenant.monthly_rent || null,
+      tenant.lease_start || null,
+      tenant.lease_end || null,
+      req.body?.agreement_body || null,
+      req.body?.notes || null,
+    ]
+  );
+
+  res.status(201).json(rows[0]);
+});
+
+app.patch('/tenancy-agreements/:id', requireAuth, requireAdmin, async (req, res) => {
+  const fields = [
+    'agreement_title',
+    'status',
+    'landlord_name',
+    'landlord_signed',
+    'agreement_body',
+    'docusign_envelope_id',
+    'sent_at',
+    'signed_at',
+    'signed_document_url',
+    'certificate_url',
+    'notes',
+  ];
+  const updates = fields.filter((field) => Object.prototype.hasOwnProperty.call(req.body || {}, field));
+  if (!updates.length) return res.status(400).json({ error: 'No valid fields to update' });
+
+  const setSql = updates.map((field, index) => field + '=$' + (index + 2)).join(', ');
+  const values = updates.map((field) => req.body[field]);
+  const { rows } = await query(
+    'update tenancy_agreements set ' + setSql + ', updated_at=now() where id=$1 returning *',
+    [req.params.id, ...values]
+  );
+  sendOneOr404(res, rows, 'Tenancy agreement');
+});
+
 adminCrud('/properties', 'properties', ['address', 'city', 'postcode', 'status', 'monthly_rent', 'bedrooms', 'property_type'], 'Property');
 adminCrud('/tenants', 'tenants', ['property_id', 'name', 'email', 'phone', 'lease_start', 'lease_end', 'payment_status'], 'Tenant');
 adminCrud('/rent-payments', 'rent_payments', ['tenant_id', 'property_id', 'due_date', 'amount', 'status', 'paid_date', 'payment_method', 'notes'], 'Rent payment');
@@ -668,6 +767,47 @@ app.post('/documents/upload', requireAuth, requireAdmin, uploadDocumentFile, (re
 adminCrud('/expenses', 'expenses', ['property_id', 'date', 'category', 'description', 'amount', 'supplier', 'receipt_url', 'notes'], 'Expense');
 
 async function applyRuntimeMigrations() {
+
+  // Tenancy agreement versioning foundation.
+  await query(`
+    create table if not exists tenancy_agreements (
+      id text primary key,
+      tenant_id text not null references tenants(id) on delete cascade,
+      property_id text references properties(id) on delete set null,
+      agreement_version integer not null default 1,
+      agreement_title text not null default 'Tenancy Agreement',
+      status text not null default 'draft',
+      landlord_name text not null default 'Lee Robertson',
+      landlord_signed boolean not null default true,
+      tenant_name_snapshot text not null,
+      property_address_snapshot text,
+      property_postcode_snapshot text,
+      rent_snapshot numeric,
+      lease_start_snapshot date,
+      lease_end_snapshot date,
+      agreement_body text,
+      docusign_envelope_id text,
+      sent_at timestamptz,
+      signed_at timestamptz,
+      signed_document_url text,
+      certificate_url text,
+      notes text,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    )
+  `);
+  await query(`alter table tenancy_agreements add column if not exists agreement_title text not null default 'Tenancy Agreement'`);
+  await query(`alter table tenancy_agreements add column if not exists status text not null default 'draft'`);
+  await query(`alter table tenancy_agreements add column if not exists landlord_name text not null default 'Lee Robertson'`);
+  await query(`alter table tenancy_agreements add column if not exists landlord_signed boolean not null default true`);
+  await query(`alter table tenancy_agreements add column if not exists agreement_body text`);
+  await query(`alter table tenancy_agreements add column if not exists docusign_envelope_id text`);
+  await query(`alter table tenancy_agreements add column if not exists sent_at timestamptz`);
+  await query(`alter table tenancy_agreements add column if not exists signed_at timestamptz`);
+  await query(`alter table tenancy_agreements add column if not exists signed_document_url text`);
+  await query(`alter table tenancy_agreements add column if not exists certificate_url text`);
+  await query(`alter table tenancy_agreements add column if not exists notes text`);
+
   await query('alter table documents alter column property_id drop not null');
   await query('alter table maintenance_tickets add column if not exists contractor text');
   await query('alter table maintenance_tickets add column if not exists cost numeric default 0');

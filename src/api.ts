@@ -56,6 +56,48 @@ export type MaintenanceTicketPayload = {
   notes?: string | null;
 };
 
+
+export type TenancyAgreement = {
+  id: string;
+  tenant_id: string;
+  property_id?: string | null;
+  agreement_version: number;
+  agreement_title: string;
+  status: string;
+  landlord_name: string;
+  landlord_signed: boolean;
+  tenant_name_snapshot: string;
+  property_address_snapshot?: string | null;
+  property_postcode_snapshot?: string | null;
+  rent_snapshot?: number | null;
+  lease_start_snapshot?: string | null;
+  lease_end_snapshot?: string | null;
+  agreement_body?: string | null;
+  docusign_envelope_id?: string | null;
+  sent_at?: string | null;
+  signed_at?: string | null;
+  signed_document_url?: string | null;
+  certificate_url?: string | null;
+  notes?: string | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type TenancyAgreementPayload = {
+  tenant_id?: string;
+  agreement_title?: string;
+  status?: string;
+  landlord_name?: string;
+  landlord_signed?: boolean;
+  agreement_body?: string | null;
+  docusign_envelope_id?: string | null;
+  sent_at?: string | null;
+  signed_at?: string | null;
+  signed_document_url?: string | null;
+  certificate_url?: string | null;
+  notes?: string | null;
+};
+
 export type DocumentPayload = {
   property_id?: string | null;
   tenant_id?: string | null;
@@ -210,6 +252,22 @@ export const api = {
     request<LicenceKey>(`/admin/licenses/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(licence),
+    }),
+
+
+  listTenancyAgreements: (tenantId?: string) =>
+    request<TenancyAgreement[]>(tenantId ? '/tenancy-agreements?tenant_id=' + encodeURIComponent(tenantId) : '/tenancy-agreements'),
+
+  createTenancyAgreement: (agreement: TenancyAgreementPayload) =>
+    request<TenancyAgreement>('/tenancy-agreements', {
+      method: 'POST',
+      body: JSON.stringify(agreement),
+    }),
+
+  updateTenancyAgreement: (id: string, agreement: TenancyAgreementPayload) =>
+    request<TenancyAgreement>('/tenancy-agreements/' + id, {
+      method: 'PATCH',
+      body: JSON.stringify(agreement),
     }),
 
   createProperty: (property: PropertyPayload) =>
