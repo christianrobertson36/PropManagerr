@@ -582,6 +582,34 @@ function Properties({ data, refresh }: { data: DashboardData; refresh: () => Pro
 function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promise<void> }) {
   const [editing, setEditing] = useState<Tenant | null>(null);
   const [form, setForm] = useState<TenantPayload>({ property_id: '', name: '', email: '', phone: '', lease_start: null, lease_end: null, payment_status: 'pending' });
+  const [agreementsByTenant, setAgreementsByTenant] = useState<Record<string, any[]>>({});
+  const [agreementLoading, setAgreementLoading] = useState(false);
+  const [agreementError, setAgreementError] = useState('');
+  const [savingAgreementId, setSavingAgreementId] = useState<string | null>(null);
+  const agreementStatuses = ['draft', 'sent', 'signed', 'voided', 'expired'];
+
+  async function loadTenantAgreements() {
+    setAgreementLoading(true);
+    setAgreementError('');
+    try {
+      const agreements = await api.listTenancyAgreements();
+      const grouped = agreements.reduce<Record<string, any[]>>((acc, agreement) => {
+        if (!acc[agreement.tenant_id]) acc[agreement.tenant_id] = [];
+        acc[agreement.tenant_id].push(agreement);
+        return acc;
+      }, {});
+      Object.values(grouped).forEach(rows => rows.sort((a, b) => Number(b.agreement_version || 0) - Number(a.agreement_version || 0)));
+      setAgreementsByTenant(grouped);
+    } catch (err) {
+      setAgreementError(err instanceof Error ? err.message : 'Could not load tenancy agreements');
+    } finally {
+      setAgreementLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadTenantAgreements();
+  }, []);
 
   function startEdit(tenant: Tenant) {
     setEditing(tenant);
@@ -613,6 +641,96 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
   async function remove(id: string) {
     await api.deleteTenant(id);
     await refresh();
+    await loadTenantAgreements();
+  }
+
+  async function createAgreement(tenant: Tenant) {
+    setSavingAgreementId(tenant.id);
+    setAgreementError('');
+    try {
+      await api.createTenancyAgreement({
+        tenant_id: tenant.id,
+        agreement_title: 'Tenancy Agreement',
+        status: 'draft',
+        landlord_name: 'Lee Robertson',
+        landlord_signed: true,
+        notes: 'Created from tenant record. Landlord-approved signature marker only; send for tenant signing before relying on this agreement.',
+      });
+      await loadTenantAgreements();
+    } catch (err) {
+      setAgreementError(err instanceof Error ? err.message : 'Could not create tenancy agreement');
+    } finally {
+      setSavingAgreementId(null);
+    }
+  }
+
+  async function updateAgreementStatus(agreementId: string, status: string) {
+    setSavingAgreementId(agreementId);
+    setAgreementError('');
+    try {
+      const payload: any = { status };
+      if (status === 'sent') payload.sent_at = new Date().toISOString();
+      if (status === 'signed') payload.signed_at = new Date().toISOString();
+      await api.updateTenancyAgreement(agreementId, payload);
+      await loadTenantAgreements();
+    } catch (err) {
+      setAgreementError(err instanceof Error ? err.message : 'Could not update tenancy agreement');
+    } finally {
+      setSavingAgreementId(null);
+    }
+  }
+
+  function agreementPanel(tenant: Tenant) {
+    const agreements = agreementsByTenant[tenant.id] || [];
+    if (!agreements.length) {
+      return (
+        <div className="min-w-72 space-y-2">
+          <div className="text-xs text-slate-500">No agreement yet</div>
+          <Button variant="secondary" disabled={savingAgreementId === tenant.id} onClick={() => createAgreement(tenant)}>
+            {savingAgreementId === tenant.id ? 'Creating...' : 'Create agreement'}
+          </Button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="min-w-80 space-y-3">
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">
+          Landlord-approved signature marker: <span className="font-semibold">Lee Robertson</span>
+        </div>
+        {agreements.map(agreement => (
+          <div key={agreement.id} className="rounded-lg border border-slate-200 bg-white p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <div className="font-medium text-slate-800">v{agreement.agreement_version} - {agreement.agreement_title}</div>
+                <div className="text-xs text-slate-500">
+                  Tenant snapshot: {agreement.tenant_name_snapshot || tenant.name}
+                </div>
+                <div className="text-xs text-slate-500">
+                  Property: {agreement.property_address_snapshot || tenant.property?.address || '-'}
+                </div>
+              </div>
+              <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">{agreement.status}</span>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {agreementStatuses.map(status => (
+                <Button
+                  key={status}
+                  variant={agreement.status === status ? 'primary' : 'secondary'}
+                  disabled={savingAgreementId === agreement.id || agreement.status === status}
+                  onClick={() => updateAgreementStatus(agreement.id, status)}
+                >
+                  {status}
+                </Button>
+              ))}
+              <Button variant="secondary" disabled={savingAgreementId === tenant.id} onClick={() => createAgreement(tenant)}>
+                New version
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
   }
 
   return (
@@ -633,13 +751,17 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
       </Select>
 
       <Table
-        columns={['Name', 'Email', 'Property', 'Lease end', 'Status', 'Actions']}
+        columns={['Name', 'Email', 'Property', 'Lease end', 'Status', 'Agreement', 'Actions']}
         rows={data.tenants.map(tenant => [
           tenant.name,
           tenant.email,
           tenant.property?.address || '-',
           dateOnly(tenant.lease_end) || '-',
           tenant.payment_status,
+          <div className="space-y-2">
+            {agreementLoading ? <div className="text-xs text-slate-500">Loading agreements...</div> : agreementPanel(tenant)}
+            {agreementError && <div className="text-xs text-rose-600">{agreementError}</div>}
+          </div>,
           <Actions onEdit={() => startEdit(tenant)} onDelete={() => remove(tenant.id)} />,
         ])}
       />
