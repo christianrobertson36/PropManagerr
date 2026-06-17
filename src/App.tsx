@@ -716,6 +716,7 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
   const [editingAgreement, setEditingAgreement] = useState<any | null>(null);
   const [agreementBodyDraft, setAgreementBodyDraft] = useState('');
   const [agreementNotice, setAgreementNotice] = useState('');
+  const [docusignStatus, setDocusignStatus] = useState<any | null>(null);
   const agreementStatuses = ['draft', 'sent', 'signed', 'voided', 'expired'];
 
   async function loadTenantAgreements() {
@@ -737,8 +738,18 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
     }
   }
 
+  async function loadDocuSignStatus() {
+    try {
+      const status = await api.docusignStatus();
+      setDocusignStatus(status);
+    } catch (err) {
+      setDocusignStatus({ ready: false, missing: ['DocuSign status unavailable'] });
+    }
+  }
+
   useEffect(() => {
     void loadTenantAgreements();
+    void loadDocuSignStatus();
   }, []);
 
   function startEdit(tenant: Tenant) {
@@ -871,21 +882,33 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
   }
 
   async function prepareSendForSigning(agreement: any) {
-    const confirmed = window.confirm(
-      'DocuSign is not connected yet. This will mark the agreement as sent and remind you to send the downloaded/printed agreement manually for tenant signing. Continue?'
-    );
-    if (!confirmed) return;
-
     setSavingAgreementId(agreement.id);
     setAgreementError('');
     setAgreementNotice('');
+
+    try {
+      const result = await api.sendTenancyAgreementViaDocuSign(agreement.id);
+      setAgreementNotice('Sent via DocuSign. Envelope ID: ' + (result.envelope_id || 'created') + '.');
+      await loadTenantAgreements();
+      await loadDocuSignStatus();
+      return;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Could not send via DocuSign';
+      const fallback = window.confirm(message + '\n\nUse manual signing fallback instead? This will mark the agreement as sent so you can download/print/copy it for tenant signing.');
+      if (!fallback) {
+        setAgreementError(message);
+        setSavingAgreementId(null);
+        return;
+      }
+    }
+
     try {
       await api.updateTenancyAgreement(agreement.id, {
         status: 'sent',
         sent_at: new Date().toISOString(),
-        notes: 'Prepared for manual signing. DocuSign integration is not connected yet.',
+        notes: 'Prepared for manual signing. DocuSign send was not completed.',
       });
-      setAgreementNotice('Marked as sent. Download, print or copy the agreement and send it manually for tenant signing.');
+      setAgreementNotice('Marked as sent manually. Download, print or copy the agreement and send it to the tenant.');
       await loadTenantAgreements();
     } catch (err) {
       setAgreementError(err instanceof Error ? err.message : 'Could not prepare agreement for signing');
@@ -913,7 +936,7 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
           Landlord-approved signature marker: <span className="font-semibold">Lee Robertson</span>
         </div>
         <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800">
-          Signing workflow: DocuSign is not connected yet. Use Preview, Download, Print or Copy text to send manually, then mark the agreement as signed when the returned signed copy is saved.
+          {docusignStatus?.ready ? 'DocuSign is configured. Use Send via DocuSign to email the tenant for signing.' : 'DocuSign setup missing: ' + ((docusignStatus?.missing || ['not checked']).join(', ')) + '. Manual fallback is still available.'}
         </div>
         {agreements.map(agreement => (
           <div key={agreement.id} className="rounded-lg border border-slate-200 bg-white p-3">
@@ -929,6 +952,11 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
               </div>
               <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">{agreement.status}</span>
             </div>
+            {agreement.docusign_envelope_id && (
+              <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-2 text-xs text-blue-800">
+                DocuSign envelope: {agreement.docusign_envelope_id}
+              </div>
+            )}
             {agreement.status === 'signed' && (
               <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
                 Signed version: keep wording locked. Create a new version if terms change.
@@ -950,7 +978,7 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
               <Button variant="secondary" onClick={() => downloadAgreementText(agreement)}>Download</Button>
               <Button variant="secondary" onClick={() => void copyAgreement(agreement)}>Copy text</Button>
               <Button variant="primary" disabled={savingAgreementId === agreement.id || agreement.status === 'signed'} onClick={() => void prepareSendForSigning(agreement)}>
-                {agreement.status === 'sent' ? 'Sent manually' : 'Send for signing'}
+                {agreement.docusign_envelope_id ? 'Sent via DocuSign' : agreement.status === 'sent' ? 'Sent manually' : 'Send via DocuSign'}
               </Button>
               <Button variant="secondary" disabled={savingAgreementId === agreement.id} onClick={() => void saveAgreementAsDocument(agreement)}>
                 {savingAgreementId === agreement.id ? 'Saving doc...' : agreement.signed_document_url ? 'Saved to Docs' : 'Save as document'}
@@ -1008,7 +1036,7 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
                 <Button variant="secondary" onClick={() => downloadAgreementText(previewAgreement)}>Download</Button>
                 <Button variant="secondary" onClick={() => void copyAgreement(previewAgreement)}>Copy text</Button>
                 <Button variant="primary" disabled={savingAgreementId === previewAgreement.id || previewAgreement.status === 'signed'} onClick={() => void prepareSendForSigning(previewAgreement)}>
-                  {previewAgreement.status === 'sent' ? 'Sent manually' : 'Send for signing'}
+                  {previewAgreement.docusign_envelope_id ? 'Sent via DocuSign' : previewAgreement.status === 'sent' ? 'Sent manually' : 'Send via DocuSign'}
                 </Button>
                 <Button variant="secondary" disabled={savingAgreementId === previewAgreement.id} onClick={() => void saveAgreementAsDocument(previewAgreement)}>
                   {savingAgreementId === previewAgreement.id ? 'Saving doc...' : previewAgreement.signed_document_url ? 'Saved to Docs' : 'Save as document'}
@@ -1022,6 +1050,7 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
               <div><span className="font-medium text-slate-700">Landlord:</span> {previewAgreement.landlord_name || 'Lee Robertson'}</div>
               <div><span className="font-medium text-slate-700">Property:</span> {previewAgreement.property_address_snapshot || '-'}</div>
               <div><span className="font-medium text-slate-700">Status:</span> {previewAgreement.status}</div>
+              <div><span className="font-medium text-slate-700">DocuSign envelope:</span> {previewAgreement.docusign_envelope_id || 'Not sent yet'}</div>
             </div>
 
             {previewAgreement.status === 'signed' && (
@@ -1031,7 +1060,7 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
             )}
             {previewAgreement.status !== 'signed' && (
               <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
-                DocuSign is planned but not connected. For now, send this agreement manually using Download, Print or Copy text. Store the returned signed copy in Documents.
+                {docusignStatus?.ready ? 'DocuSign is configured. Click Send via DocuSign to email this agreement to the tenant.' : 'DocuSign setup is missing: ' + ((docusignStatus?.missing || ['not checked']).join(', ')) + '. You can still use Download, Print or Copy text for manual signing.'}
               </div>
             )}
 

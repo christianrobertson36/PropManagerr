@@ -1,4 +1,3 @@
-import crypto from 'node:crypto';
 import { initDatabase } from './initDb.js';
 import 'dotenv/config';
 import fs from 'fs/promises';
@@ -8,6 +7,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import multer from 'multer';
+import crypto from 'crypto';
 import { query } from './db.js';
 import { comparePassword, hashPassword, requireAdmin, requireAuth, signUser } from './auth.js';
 
@@ -671,6 +671,202 @@ app.post('/maintenance', requireAuth, async (req, res) => {
   res.status(201).json(rows[0]);
 });
 
+
+
+function docusignPrivateKey() {
+  return (process.env.DOCUSIGN_PRIVATE_KEY || '').replace(/\\n/g, '\n');
+}
+
+function docusignConfigStatus() {
+  const config = {
+    integrationKey: process.env.DOCUSIGN_INTEGRATION_KEY || '',
+    userId: process.env.DOCUSIGN_USER_ID || '',
+    accountId: process.env.DOCUSIGN_ACCOUNT_ID || '',
+    privateKey: docusignPrivateKey(),
+    baseUrl: process.env.DOCUSIGN_BASE_URL || 'https://demo.docusign.net',
+    oauthBaseUrl: process.env.DOCUSIGN_OAUTH_BASE_URL || 'account-d.docusign.com',
+  };
+
+  const missing = [];
+  if (!config.integrationKey) missing.push('DOCUSIGN_INTEGRATION_KEY');
+  if (!config.userId) missing.push('DOCUSIGN_USER_ID');
+  if (!config.accountId) missing.push('DOCUSIGN_ACCOUNT_ID');
+  if (!config.privateKey) missing.push('DOCUSIGN_PRIVATE_KEY');
+
+  return {
+    ready: missing.length === 0,
+    missing,
+    base_url: config.baseUrl,
+    oauth_base_url: config.oauthBaseUrl,
+    account_id_configured: Boolean(config.accountId),
+    integration_key_configured: Boolean(config.integrationKey),
+    user_id_configured: Boolean(config.userId),
+    private_key_configured: Boolean(config.privateKey),
+    config,
+  };
+}
+
+function toBase64Url(value) {
+  return Buffer.from(value).toString('base64url');
+}
+
+async function docusignAccessToken(config) {
+  const now = Math.floor(Date.now() / 1000);
+  const header = toBase64Url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
+  const payload = toBase64Url(JSON.stringify({
+    iss: config.integrationKey,
+    sub: config.userId,
+    aud: config.oauthBaseUrl,
+    iat: now,
+    exp: now + 3600,
+    scope: 'signature impersonation',
+  }));
+  const unsigned = header + '.' + payload;
+  const signature = crypto.sign('RSA-SHA256', Buffer.from(unsigned), config.privateKey).toString('base64url');
+  const assertion = unsigned + '.' + signature;
+
+  const tokenResponse = await fetch('https://' + config.oauthBaseUrl + '/oauth/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+      assertion,
+    }),
+  });
+
+  const tokenJson = await tokenResponse.json().catch(() => ({}));
+  if (!tokenResponse.ok) {
+    const detail = tokenJson.error_description || tokenJson.error || 'DocuSign token request failed';
+    throw new Error(detail);
+  }
+
+  return tokenJson.access_token;
+}
+
+function agreementDocusignDocument(agreement) {
+  const body = agreement.agreement_body || 'Tenancy agreement text missing.';
+
+  return [
+    body,
+    '',
+    '---',
+    'Tenant signature:',
+    '',
+    'Signed date:',
+  ].join('\n');
+}
+
+app.get('/docusign/status', requireAuth, requireAdmin, async (_req, res) => {
+  const status = docusignConfigStatus();
+  const { config, ...safeStatus } = status;
+  res.json(safeStatus);
+});
+
+app.post('/tenancy-agreements/:id/docusign/send', requireAuth, requireAdmin, async (req, res) => {
+  const status = docusignConfigStatus();
+  if (!status.ready) {
+    return res.status(400).json({
+      error: 'DocuSign is not configured',
+      missing: status.missing,
+    });
+  }
+
+  const { rows } = await query(
+    `select a.*, t.email as tenant_email, coalesce(t.name, a.tenant_name_snapshot) as tenant_display_name
+     from tenancy_agreements a
+     left join tenants t on t.id=a.tenant_id and t.deleted_at is null
+     where a.id=$1`,
+    [req.params.id]
+  );
+
+  const agreement = rows[0];
+  if (!agreement) return res.status(404).json({ error: 'Tenancy agreement not found' });
+  if (!agreement.tenant_email) return res.status(400).json({ error: 'Tenant email is required before sending via DocuSign' });
+  if (agreement.status === 'signed') return res.status(400).json({ error: 'Signed agreements cannot be resent' });
+
+  const accessToken = await docusignAccessToken(status.config);
+  const documentText = agreementDocusignDocument(agreement);
+  const documentBase64 = Buffer.from(documentText, 'utf8').toString('base64');
+
+  const envelopeDefinition = {
+    emailSubject: 'Please sign your tenancy agreement',
+    emailBlurb: 'Please review and sign your tenancy agreement. This email was sent from PropManagerr via DocuSign.',
+    documents: [
+      {
+        documentBase64,
+        name: (agreement.agreement_title || 'Tenancy Agreement') + ' v' + (agreement.agreement_version || 1) + '.txt',
+        fileExtension: 'txt',
+        documentId: '1',
+      },
+    ],
+    recipients: {
+      signers: [
+        {
+          email: agreement.tenant_email,
+          name: agreement.tenant_display_name || agreement.tenant_name_snapshot || 'Tenant',
+          recipientId: '1',
+          routingOrder: '1',
+          tabs: {
+            signHereTabs: [
+              {
+                documentId: '1',
+                pageNumber: '1',
+                xPosition: '120',
+                yPosition: '700',
+              },
+            ],
+            dateSignedTabs: [
+              {
+                documentId: '1',
+                pageNumber: '1',
+                xPosition: '120',
+                yPosition: '750',
+              },
+            ],
+          },
+        },
+      ],
+    },
+    status: 'sent',
+  };
+
+  const envelopeResponse = await fetch(status.config.baseUrl + '/restapi/v2.1/accounts/' + status.config.accountId + '/envelopes', {
+    method: 'POST',
+    headers: {
+      Authorization: 'Bearer ' + accessToken,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(envelopeDefinition),
+  });
+
+  const envelopeJson = await envelopeResponse.json().catch(() => ({}));
+  if (!envelopeResponse.ok) {
+    const detail = envelopeJson.message || envelopeJson.error || 'DocuSign envelope creation failed';
+    throw new Error(detail);
+  }
+
+  const envelopeId = envelopeJson.envelopeId || envelopeJson.envelope_id || '';
+  const updated = await query(
+    `update tenancy_agreements
+     set status='sent',
+         docusign_envelope_id=$2,
+         sent_at=coalesce(sent_at, now()),
+         notes=$3,
+         updated_at=now()
+     where id=$1
+     returning *`,
+    [
+      agreement.id,
+      envelopeId,
+      'Sent to tenant via DocuSign. Await signed return/download step.',
+    ]
+  );
+
+  res.status(201).json({
+    envelope_id: envelopeId,
+    agreement: updated.rows[0],
+  });
+});
 
 app.get('/tenancy-agreements', requireAuth, requireAdmin, async (req, res) => {
   const tenantId = req.query.tenant_id ? String(req.query.tenant_id) : '';

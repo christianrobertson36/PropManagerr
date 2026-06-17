@@ -285,6 +285,13 @@ export const api = {
       method: 'POST',
     }),
 
+  docusignStatus: () => request<{ ready: boolean; missing: string[]; base_url?: string; oauth_base_url?: string }>('/docusign/status'),
+
+  sendTenancyAgreementViaDocuSign: (id: string) =>
+    request<{ envelope_id: string; agreement: TenancyAgreement }>('/tenancy-agreements/' + id + '/docusign/send', {
+      method: 'POST',
+    }),
+
   adminExport: () => request<Record<string, any>>('/admin/export'),
 
   listTrash: () => request<DeletedRecord[]>('/trash'),
