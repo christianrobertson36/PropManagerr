@@ -2018,7 +2018,7 @@ function AdminSafetyChecks() {
   const checks = [
     {
       label: 'Current deployed tags',
-      value: 'Web v51 / API v33 after this deploy',
+      value: 'Web v54 / API v35 after this deploy',
       tone: 'info',
     },
     {
