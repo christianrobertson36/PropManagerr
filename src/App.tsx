@@ -1031,6 +1031,11 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
                 Signed version: keep wording locked. Create a new version if terms change.
               </div>
             )}
+            {agreement.status === 'signed' && !agreement.signed_document_url && (
+              <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-2 text-xs text-rose-800">
+                Signed but no saved document link yet. Save the signed copy to Documents so the tenant can view it.
+              </div>
+            )}
             {agreement.status === 'sent' && !agreement.signed_document_url && (
               <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-2 text-xs text-blue-800">
                 Sent for manual signing. Save the signed return copy as a document, then mark this agreement as signed.
@@ -1740,11 +1745,19 @@ function Documents({ data, refresh, user }: { data: DashboardData; refresh: () =
         columns={['Name', 'Type', 'Property', 'Tenant', 'Expiry', 'File', 'Actions']}
         rows={visibleDocuments.map(document => [
           document.name,
-          document.doc_type,
+          document.doc_type === 'tenancy_agreement' ? (
+            <span className="inline-flex rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">Signed tenancy agreement</span>
+          ) : document.doc_type,
           document.property?.address || propertyAddress(document.property_id),
           document.tenant?.name || tenantName(document.tenant_id),
           dateOnly(document.expiry_date) || '-',
-          document.file_url ? <a key={`${document.id}-file`} className="font-medium text-emerald-700 hover:underline" href={api.documentFileUrl(document.file_url)} target="_blank" rel="noreferrer">View</a> : 'Not uploaded',
+          document.file_url ? (
+            <a key={`${document.id}-file`} className="font-medium text-emerald-700 hover:underline" href={api.documentFileUrl(document.file_url)} target="_blank" rel="noreferrer">
+              {document.doc_type === 'tenancy_agreement' ? 'Open signed agreement' : 'View file'}
+            </a>
+          ) : (
+            <span className="text-amber-700">No file uploaded</span>
+          ),
           user.role === 'admin' ? (
             <div className="flex gap-2">
               <Button variant="secondary" onClick={() => startEdit(document)}>Edit</Button>
@@ -2572,3 +2585,4 @@ export default function App() {
     </div>
   );
 }
+
