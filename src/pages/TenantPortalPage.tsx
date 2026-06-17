@@ -101,13 +101,30 @@ export function TenantPortal({ data, user }: { data: DashboardData; user: User }
     .filter(payment => payment.status !== 'paid')
     .slice()
     .sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())[0];
+  const tenancyDocuments = documents.filter(document => document.doc_type === 'tenancy_agreement');
+  const urgentDocuments = documents
+    .filter(document => {
+      if (!document.expiry_date) return false;
+      const days = Math.ceil((new Date(document.expiry_date).getTime() - Date.now()) / 86_400_000);
+      return days <= 30;
+    })
+    .slice()
+    .sort((a, b) => new Date(a.expiry_date || '').getTime() - new Date(b.expiry_date || '').getTime());
+  const latestDocuments = documents
+    .slice()
+    .sort((a, b) => new Date(b.created_at || b.expiry_date || '').getTime() - new Date(a.created_at || a.expiry_date || '').getTime())
+    .slice(0, 3);
+  const latestRepairs = repairs
+    .slice()
+    .sort((a, b) => new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime())
+    .slice(0, 3);
 
   return (
     <div className="space-y-6">
       <div className="rounded-2xl bg-slate-900 p-6 text-white shadow-sm">
         <p className="text-sm text-emerald-200">Tenant portal</p>
         <h1 className="mt-1 text-2xl font-bold">Welcome, {user.name}</h1>
-        <p className="mt-2 text-sm text-slate-300">Your property, rent, documents and repairs in one place.</p>
+        <p className="mt-2 text-sm text-slate-300">Your property, rent, tenancy documents and repair updates in one simple place.</p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">
@@ -115,6 +132,23 @@ export function TenantPortal({ data, user }: { data: DashboardData; user: User }
         <MiniStat label="Open repairs" value={String(openRepairs)} icon={Wrench} />
         <MiniStat label="Documents" value={String(documents.length)} icon={FileText} />
         <MiniStat label="Property" value={property ? 'Assigned' : 'Missing'} icon={property ? Home : AlertTriangle} />
+      </div>
+
+      <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-emerald-900">Tenant quick summary</p>
+            <p className="mt-1 text-sm text-emerald-800">
+              {nextRent ? 'Next rent due ' + dateOnly(nextRent.due_date) + ' for ' + money(nextRent.amount) + '.' : 'No unpaid rent is currently showing.'}
+            </p>
+            <p className="mt-1 text-sm text-emerald-800">
+              {tenancyDocuments.length > 0 ? tenancyDocuments.length + ' tenancy agreement document(s) available.' : 'No saved tenancy agreement document is visible yet.'}
+            </p>
+          </div>
+          <div className="rounded-lg bg-white/70 px-4 py-3 text-sm text-emerald-900">
+            {urgentDocuments.length > 0 ? urgentDocuments.length + ' document(s) need attention soon.' : 'No urgent document reminders.'}
+          </div>
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -165,6 +199,16 @@ export function TenantPortal({ data, user }: { data: DashboardData; user: User }
       </TenantCard>
 
       <TenantCard title="My documents">
+        {tenancyDocuments.length > 0 && (
+          <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+            Your tenancy agreement is available below. Open the document to view or download it.
+          </div>
+        )}
+        {urgentDocuments.length > 0 && (
+          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+            {urgentDocuments.length} document(s) expire within 30 days or are overdue. Please contact the landlord if anything needs renewing.
+          </div>
+        )}
         <SimpleTable<DocumentRecord>
           empty="No documents have been shared with you yet."
           columns={[
@@ -184,6 +228,11 @@ export function TenantPortal({ data, user }: { data: DashboardData; user: User }
       </TenantCard>
 
       <TenantCard title="My repairs">
+        {latestRepairs.length > 0 && (
+          <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+            Latest update: {latestRepairs[0].title} — {latestRepairs[0].status}.
+          </div>
+        )}
         <SimpleTable<MaintenanceTicket>
           empty="No repairs reported yet."
           columns={[
