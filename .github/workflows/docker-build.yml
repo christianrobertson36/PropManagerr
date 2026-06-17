@@ -31,7 +31,7 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          tags: ghcr.io/christianrobertson36/propmanagerr-web:v61
+          tags: ghcr.io/christianrobertson36/propmanagerr-web:v62
 
   build-api:
     name: Build API image

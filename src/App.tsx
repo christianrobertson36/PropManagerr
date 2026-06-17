@@ -755,6 +755,7 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
   const [portalAccounts, setPortalAccounts] = useState<AdminAccount[]>([]);
   const [creatingPortalTenantId, setCreatingPortalTenantId] = useState<string | null>(null);
   const [previewTenant, setPreviewTenant] = useState<Tenant | null>(null);
+  const [tenantPropertyFilter, setTenantPropertyFilter] = useState('');
   const agreementStatuses = ['draft', 'sent', 'signed', 'voided', 'expired'];
 
   async function loadTenantAgreements() {
@@ -1194,7 +1195,7 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
           <Button variant="secondary" onClick={() => setPreviewTenant(tenant)}>View portal</Button>
           {!activeAccount && !inactiveAccount && (
             <Button variant="primary" disabled={creatingPortalTenantId === tenant.id || !tenant.email} onClick={() => void createTenantPortalLogin(tenant)}>
-              {creatingPortalTenantId === tenant.id ? 'Creating...' : 'Create login'}
+              {!tenant.email ? 'Email needed' : creatingPortalTenantId === tenant.id ? 'Creating...' : 'Create login'}
             </Button>
           )}
           <Button variant="secondary" onClick={() => void copyTenantPortalSetup(tenant)}>Copy setup</Button>
@@ -1210,6 +1211,12 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
     role: 'tenant',
     tenant_id: previewTenant.id,
   } as any) : null;
+
+  const filteredTenants = data.tenants.filter(tenant => {
+    const tenantPropertyId = tenant.property_id || tenant.property?.id || '';
+    return !tenantPropertyFilter || tenantPropertyId === tenantPropertyFilter;
+  });
+  const selectedTenantProperty = tenantPropertyFilter ? data.properties.find(property => property.id === tenantPropertyFilter) || null : null;
 
   return (
     <CrudLayout title={editing ? 'Edit tenant' : 'Add tenant'} onSubmit={submit} onCancel={reset} editing={Boolean(editing)}>
@@ -1329,12 +1336,26 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
         </div>
       )}
 
+      <Card title="Filter tenants by property">
+        <div className="grid gap-4 md:grid-cols-3">
+          <Select<string> label="Show tenants for" value={tenantPropertyFilter} onChange={value => setTenantPropertyFilter(value || '')}>
+            <option value="">All properties</option>
+            {data.properties.map(property => <option key={property.id} value={property.id}>{property.address}</option>)}
+          </Select>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 md:col-span-2">
+            <p className="font-medium text-slate-900">{tenantPropertyFilter ? selectedTenantProperty?.address || 'Selected property' : 'All properties'}</p>
+            <p>{filteredTenants.length} of {data.tenants.length} tenants shown.</p>
+            <p className="text-xs text-slate-500">Use this to keep the tenant list short once more properties and tenants are added.</p>
+          </div>
+        </div>
+      </Card>
+
       <Table
         columns={['Name', 'Email', 'Property', 'Lease end', 'Status', 'Agreement', 'Portal', 'Actions']}
-        rows={data.tenants.map(tenant => [
+        rows={filteredTenants.map(tenant => [
           tenant.name,
           tenant.email,
-          tenant.property?.address || '-',
+          <div className="min-w-48 text-sm"><p className="font-medium text-slate-800">{tenant.property?.address || 'Unassigned'}</p><p className="text-xs text-slate-500">Connected property</p></div>,
           dateOnly(tenant.lease_end) || '-',
           tenant.payment_status,
           <div className="space-y-2">
