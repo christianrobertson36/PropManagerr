@@ -579,6 +579,33 @@ function Properties({ data, refresh }: { data: DashboardData; refresh: () => Pro
   );
 }
 
+function buildAgreementBody(tenant: Tenant) {
+  const propertyAddress = tenant.property?.address || 'the property linked to this tenancy';
+  const rent = tenant.property?.monthly_rent ? money(tenant.property.monthly_rent) : '[rent amount]';
+  const leaseStart = dateOnly(tenant.lease_start) || '[lease start date]';
+  const leaseEnd = dateOnly(tenant.lease_end) || '[lease end date]';
+
+  return [
+    'TENANCY AGREEMENT',
+    '',
+    'Landlord: Lee Robertson',
+    'Tenant: ' + tenant.name,
+    'Property: ' + propertyAddress,
+    'Rent: ' + rent + ' per month',
+    'Tenancy start: ' + leaseStart,
+    'Tenancy end: ' + leaseEnd,
+    '',
+    '1. The tenant agrees to occupy the property as their home and to keep the property in good condition.',
+    '2. The tenant agrees to pay rent on time and to report maintenance issues promptly.',
+    '3. The landlord will maintain the property in line with applicable landlord responsibilities.',
+    '4. This draft should be reviewed before sending for tenant signature.',
+    '',
+    'Landlord-approved signature marker: Lee Robertson',
+    'Tenant signature: ______________________________',
+    'Date: ______________________________',
+  ].join('\n');
+}
+
 function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promise<void> }) {
   const [editing, setEditing] = useState<Tenant | null>(null);
   const [form, setForm] = useState<TenantPayload>({ property_id: '', name: '', email: '', phone: '', lease_start: null, lease_end: null, payment_status: 'pending' });
@@ -586,6 +613,9 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
   const [agreementLoading, setAgreementLoading] = useState(false);
   const [agreementError, setAgreementError] = useState('');
   const [savingAgreementId, setSavingAgreementId] = useState<string | null>(null);
+  const [previewAgreement, setPreviewAgreement] = useState<any | null>(null);
+  const [editingAgreement, setEditingAgreement] = useState<any | null>(null);
+  const [agreementBodyDraft, setAgreementBodyDraft] = useState('');
   const agreementStatuses = ['draft', 'sent', 'signed', 'voided', 'expired'];
 
   async function loadTenantAgreements() {
@@ -654,6 +684,7 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
         status: 'draft',
         landlord_name: 'Lee Robertson',
         landlord_signed: true,
+        agreement_body: buildAgreementBody(tenant),
         notes: 'Created from tenant record. Landlord-approved signature marker only; send for tenant signing before relying on this agreement.',
       });
       await loadTenantAgreements();
@@ -675,6 +706,27 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
       await loadTenantAgreements();
     } catch (err) {
       setAgreementError(err instanceof Error ? err.message : 'Could not update tenancy agreement');
+    } finally {
+      setSavingAgreementId(null);
+    }
+  }
+
+  function startEditAgreementBody(agreement: any) {
+    setEditingAgreement(agreement);
+    setAgreementBodyDraft(agreement.agreement_body || '');
+  }
+
+  async function saveAgreementBody() {
+    if (!editingAgreement) return;
+    setSavingAgreementId(editingAgreement.id);
+    setAgreementError('');
+    try {
+      await api.updateTenancyAgreement(editingAgreement.id, { agreement_body: agreementBodyDraft });
+      setEditingAgreement(null);
+      setAgreementBodyDraft('');
+      await loadTenantAgreements();
+    } catch (err) {
+      setAgreementError(err instanceof Error ? err.message : 'Could not save agreement wording');
     } finally {
       setSavingAgreementId(null);
     }
@@ -713,6 +765,10 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
               <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">{agreement.status}</span>
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
+              <Button variant="secondary" onClick={() => setPreviewAgreement(agreement)}>Preview</Button>
+              <Button variant="secondary" disabled={agreement.status === 'signed'} onClick={() => startEditAgreementBody(agreement)}>
+                {agreement.status === 'signed' ? 'Signed locked' : 'Edit wording'}
+              </Button>
               {agreementStatuses.map(status => (
                 <Button
                   key={status}
@@ -749,6 +805,48 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
         <option value="paid">Paid</option>
         <option value="overdue">Overdue</option>
       </Select>
+
+      {previewAgreement && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+          <div className="max-h-[85vh] w-full max-w-3xl overflow-y-auto rounded-xl bg-white p-5 shadow-xl">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">Agreement preview</h3>
+                <p className="text-sm text-slate-500">Version {previewAgreement.agreement_version} - {previewAgreement.status}</p>
+              </div>
+              <Button variant="secondary" onClick={() => setPreviewAgreement(null)}>Close</Button>
+            </div>
+            <pre className="whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-800">
+              {previewAgreement.agreement_body || 'No agreement wording saved yet.'}
+            </pre>
+          </div>
+        </div>
+      )}
+
+      {editingAgreement && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+          <div className="w-full max-w-3xl rounded-xl bg-white p-5 shadow-xl">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">Edit agreement wording</h3>
+                <p className="text-sm text-slate-500">Signed agreements should stay locked. Create a new version for changed terms.</p>
+              </div>
+              <Button variant="secondary" onClick={() => setEditingAgreement(null)}>Close</Button>
+            </div>
+            <textarea
+              className="min-h-96 w-full rounded-lg border border-slate-300 p-3 text-sm leading-6 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              value={agreementBodyDraft}
+              onChange={event => setAgreementBodyDraft(event.target.value)}
+            />
+            <div className="mt-4 flex gap-2">
+              <Button onClick={saveAgreementBody} disabled={savingAgreementId === editingAgreement.id}>
+                {savingAgreementId === editingAgreement.id ? 'Saving...' : 'Save wording'}
+              </Button>
+              <Button variant="secondary" onClick={() => setEditingAgreement(null)}>Cancel</Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <Table
         columns={['Name', 'Email', 'Property', 'Lease end', 'Status', 'Agreement', 'Actions']}
