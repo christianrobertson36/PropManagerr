@@ -772,8 +772,8 @@ async function applyRuntimeMigrations() {
   await query(`
     create table if not exists tenancy_agreements (
       id text primary key,
-      tenant_id text not null references tenants(id) on delete cascade,
-      property_id text references properties(id) on delete set null,
+      tenant_id uuid not null references tenants(id) on delete cascade,
+      property_id uuid references properties(id) on delete set null,
       agreement_version integer not null default 1,
       agreement_title text not null default 'Tenancy Agreement',
       status text not null default 'draft',
