@@ -22,3 +22,6 @@ dist-ssr
 *.sw?
 .env
 release/
+.env.local
+*.env
+release-local/
