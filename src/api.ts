@@ -205,7 +205,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 export const api = {
   documentFileUrl,
 
-  health: () => request<{ ok: boolean }>('/health'),
+  health: () => request<{ ok: boolean; app?: string; version?: string }>('/health'),
 
   login: (email: string, password: string) =>
     request<LoginResponse>('/auth/login', {

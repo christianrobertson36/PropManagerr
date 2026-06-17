@@ -1991,34 +1991,44 @@ function LicenceManagement() {
 
 function AdminSafetyChecks() {
   const [checkingHealth, setCheckingHealth] = useState(false);
+  const webBuildVersion = 'v55';
   const [healthStatus, setHealthStatus] = useState<'not_checked' | 'ok' | 'error'>('not_checked');
   const [healthMessage, setHealthMessage] = useState('Not checked in this browser session.');
+  const [apiBuildVersion, setApiBuildVersion] = useState('not checked');
 
   async function checkHealth() {
     setCheckingHealth(true);
     setHealthStatus('not_checked');
     setHealthMessage('Checking API health...');
+    setApiBuildVersion('checking');
     try {
       const result = await api.health();
       if (result?.ok) {
         setHealthStatus('ok');
-        setHealthMessage('API health check passed.');
+        setApiBuildVersion(result.version || 'unknown');
+        setHealthMessage('API health check passed' + (result.version ? ' - ' + result.version : '') + '.');
       } else {
         setHealthStatus('error');
+        setApiBuildVersion('unavailable');
         setHealthMessage('API replied, but did not return ok=true.');
       }
     } catch (err) {
       setHealthStatus('error');
+      setApiBuildVersion('unavailable');
       setHealthMessage(err instanceof Error ? err.message : 'API health check failed.');
     } finally {
       setCheckingHealth(false);
     }
   }
 
+  useEffect(() => {
+    void checkHealth();
+  }, []);
+
   const checks = [
     {
       label: 'Current deployed tags',
-      value: 'Web v54 / API v35 after this deploy',
+      value: 'Web ' + webBuildVersion + ' / API ' + apiBuildVersion,
       tone: 'info',
     },
     {
