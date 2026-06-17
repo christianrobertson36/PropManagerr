@@ -870,6 +870,30 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
     }
   }
 
+  async function prepareSendForSigning(agreement: any) {
+    const confirmed = window.confirm(
+      'DocuSign is not connected yet. This will mark the agreement as sent and remind you to send the downloaded/printed agreement manually for tenant signing. Continue?'
+    );
+    if (!confirmed) return;
+
+    setSavingAgreementId(agreement.id);
+    setAgreementError('');
+    setAgreementNotice('');
+    try {
+      await api.updateTenancyAgreement(agreement.id, {
+        status: 'sent',
+        sent_at: new Date().toISOString(),
+        notes: 'Prepared for manual signing. DocuSign integration is not connected yet.',
+      });
+      setAgreementNotice('Marked as sent. Download, print or copy the agreement and send it manually for tenant signing.');
+      await loadTenantAgreements();
+    } catch (err) {
+      setAgreementError(err instanceof Error ? err.message : 'Could not prepare agreement for signing');
+    } finally {
+      setSavingAgreementId(null);
+    }
+  }
+
   function agreementPanel(tenant: Tenant) {
     const agreements = agreementsByTenant[tenant.id] || [];
     if (!agreements.length) {
@@ -887,6 +911,9 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
       <div className="min-w-80 space-y-3">
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">
           Landlord-approved signature marker: <span className="font-semibold">Lee Robertson</span>
+        </div>
+        <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800">
+          Signing workflow: DocuSign is not connected yet. Use Preview, Download, Print or Copy text to send manually, then mark the agreement as signed when the returned signed copy is saved.
         </div>
         {agreements.map(agreement => (
           <div key={agreement.id} className="rounded-lg border border-slate-200 bg-white p-3">
@@ -907,6 +934,11 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
                 Signed version: keep wording locked. Create a new version if terms change.
               </div>
             )}
+            {agreement.status === 'sent' && !agreement.signed_document_url && (
+              <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-2 text-xs text-blue-800">
+                Sent for manual signing. Save the signed return copy as a document, then mark this agreement as signed.
+              </div>
+            )}
             {agreement.signed_document_url && (
               <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-800">
                 Saved in Documents. Tenants can view it from the Documents area.
@@ -917,6 +949,9 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
               <Button variant="secondary" onClick={() => printAgreementText(agreement)}>Print</Button>
               <Button variant="secondary" onClick={() => downloadAgreementText(agreement)}>Download</Button>
               <Button variant="secondary" onClick={() => void copyAgreement(agreement)}>Copy text</Button>
+              <Button variant="primary" disabled={savingAgreementId === agreement.id || agreement.status === 'signed'} onClick={() => void prepareSendForSigning(agreement)}>
+                {agreement.status === 'sent' ? 'Sent manually' : 'Send for signing'}
+              </Button>
               <Button variant="secondary" disabled={savingAgreementId === agreement.id} onClick={() => void saveAgreementAsDocument(agreement)}>
                 {savingAgreementId === agreement.id ? 'Saving doc...' : agreement.signed_document_url ? 'Saved to Docs' : 'Save as document'}
               </Button>
@@ -972,6 +1007,9 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
                 <Button variant="secondary" onClick={() => printAgreementText(previewAgreement)}>Print</Button>
                 <Button variant="secondary" onClick={() => downloadAgreementText(previewAgreement)}>Download</Button>
                 <Button variant="secondary" onClick={() => void copyAgreement(previewAgreement)}>Copy text</Button>
+                <Button variant="primary" disabled={savingAgreementId === previewAgreement.id || previewAgreement.status === 'signed'} onClick={() => void prepareSendForSigning(previewAgreement)}>
+                  {previewAgreement.status === 'sent' ? 'Sent manually' : 'Send for signing'}
+                </Button>
                 <Button variant="secondary" disabled={savingAgreementId === previewAgreement.id} onClick={() => void saveAgreementAsDocument(previewAgreement)}>
                   {savingAgreementId === previewAgreement.id ? 'Saving doc...' : previewAgreement.signed_document_url ? 'Saved to Docs' : 'Save as document'}
                 </Button>
@@ -989,6 +1027,11 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
             {previewAgreement.status === 'signed' && (
               <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
                 Signed agreement: keep this version as the record. Create a new version for any changed terms.
+              </div>
+            )}
+            {previewAgreement.status !== 'signed' && (
+              <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+                DocuSign is planned but not connected. For now, send this agreement manually using Download, Print or Copy text. Store the returned signed copy in Documents.
               </div>
             )}
 
