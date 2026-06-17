@@ -606,6 +606,87 @@ function buildAgreementBody(tenant: Tenant) {
   ].join('\n');
 }
 
+function agreementText(agreement: any) {
+  return agreement?.agreement_body || 'No agreement wording saved yet.';
+}
+
+function agreementFileName(agreement: any) {
+  const version = agreement?.agreement_version ? 'v' + agreement.agreement_version : 'draft';
+  const tenant = String(agreement?.tenant_name_snapshot || 'tenant').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'tenant';
+  return `tenancy-agreement-${tenant}-${version}.txt`;
+}
+
+function escapeHtml(value: string) {
+  const chars: Record<string, string> = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  };
+  return value.replace(/[&<>"']/g, char => chars[char] || char);
+}
+
+function downloadAgreementText(agreement: any) {
+  const blob = new Blob([agreementText(agreement)], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = agreementFileName(agreement);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function copyAgreementText(agreement: any) {
+  const text = agreementText(agreement);
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  document.execCommand('copy');
+  textarea.remove();
+}
+
+function printAgreementText(agreement: any) {
+  const printWindow = window.open('', '_blank', 'width=900,height=1000');
+  if (!printWindow) return;
+
+  const title = agreement?.agreement_title || 'Tenancy Agreement';
+  const status = agreement?.status || 'draft';
+  const version = agreement?.agreement_version || '';
+  const body = escapeHtml(agreementText(agreement));
+
+  printWindow.document.write(`<!doctype html>
+<html>
+<head>
+  <title>${escapeHtml(title)}</title>
+  <style>
+    body { font-family: Arial, sans-serif; color: #111827; margin: 40px; line-height: 1.55; }
+    .meta { margin-bottom: 24px; padding: 12px; border: 1px solid #d1d5db; background: #f9fafb; font-size: 13px; }
+    pre { white-space: pre-wrap; font-family: Arial, sans-serif; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <h1>${escapeHtml(title)}</h1>
+  <div class="meta">Version: ${escapeHtml(String(version))} &nbsp; | &nbsp; Status: ${escapeHtml(status)}</div>
+  <pre>${body}</pre>
+</body>
+</html>`);
+  printWindow.document.close();
+  printWindow.focus();
+  printWindow.print();
+}
+
 function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promise<void> }) {
   const [editing, setEditing] = useState<Tenant | null>(null);
   const [form, setForm] = useState<TenantPayload>({ property_id: '', name: '', email: '', phone: '', lease_start: null, lease_end: null, payment_status: 'pending' });
@@ -616,6 +697,7 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
   const [previewAgreement, setPreviewAgreement] = useState<any | null>(null);
   const [editingAgreement, setEditingAgreement] = useState<any | null>(null);
   const [agreementBodyDraft, setAgreementBodyDraft] = useState('');
+  const [agreementNotice, setAgreementNotice] = useState('');
   const agreementStatuses = ['draft', 'sent', 'signed', 'voided', 'expired'];
 
   async function loadTenantAgreements() {
@@ -720,15 +802,28 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
     if (!editingAgreement) return;
     setSavingAgreementId(editingAgreement.id);
     setAgreementError('');
+    setAgreementNotice('');
     try {
       await api.updateTenancyAgreement(editingAgreement.id, { agreement_body: agreementBodyDraft });
       setEditingAgreement(null);
       setAgreementBodyDraft('');
+      setAgreementNotice('Agreement wording saved.');
       await loadTenantAgreements();
     } catch (err) {
       setAgreementError(err instanceof Error ? err.message : 'Could not save agreement wording');
     } finally {
       setSavingAgreementId(null);
+    }
+  }
+
+  async function copyAgreement(agreement: any) {
+    setAgreementError('');
+    setAgreementNotice('');
+    try {
+      await copyAgreementText(agreement);
+      setAgreementNotice('Agreement text copied.');
+    } catch (err) {
+      setAgreementError(err instanceof Error ? err.message : 'Could not copy agreement text');
     }
   }
 
@@ -764,8 +859,16 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
               </div>
               <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">{agreement.status}</span>
             </div>
+            {agreement.status === 'signed' && (
+              <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+                Signed version: keep wording locked. Create a new version if terms change.
+              </div>
+            )}
             <div className="mt-3 flex flex-wrap gap-2">
               <Button variant="secondary" onClick={() => setPreviewAgreement(agreement)}>Preview</Button>
+              <Button variant="secondary" onClick={() => printAgreementText(agreement)}>Print</Button>
+              <Button variant="secondary" onClick={() => downloadAgreementText(agreement)}>Download</Button>
+              <Button variant="secondary" onClick={() => void copyAgreement(agreement)}>Copy text</Button>
               <Button variant="secondary" disabled={agreement.status === 'signed'} onClick={() => startEditAgreementBody(agreement)}>
                 {agreement.status === 'signed' ? 'Signed locked' : 'Edit wording'}
               </Button>
@@ -808,16 +911,35 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
 
       {previewAgreement && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
-          <div className="max-h-[85vh] w-full max-w-3xl overflow-y-auto rounded-xl bg-white p-5 shadow-xl">
-            <div className="mb-4 flex items-start justify-between gap-4">
+          <div className="max-h-[85vh] w-full max-w-4xl overflow-y-auto rounded-xl bg-white p-5 shadow-xl">
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
               <div>
                 <h3 className="text-lg font-semibold text-slate-900">Agreement preview</h3>
                 <p className="text-sm text-slate-500">Version {previewAgreement.agreement_version} - {previewAgreement.status}</p>
               </div>
-              <Button variant="secondary" onClick={() => setPreviewAgreement(null)}>Close</Button>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="secondary" onClick={() => printAgreementText(previewAgreement)}>Print</Button>
+                <Button variant="secondary" onClick={() => downloadAgreementText(previewAgreement)}>Download</Button>
+                <Button variant="secondary" onClick={() => void copyAgreement(previewAgreement)}>Copy text</Button>
+                <Button variant="secondary" onClick={() => setPreviewAgreement(null)}>Close</Button>
+              </div>
             </div>
-            <pre className="whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-800">
-              {previewAgreement.agreement_body || 'No agreement wording saved yet.'}
+
+            <div className="mb-4 grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm md:grid-cols-2">
+              <div><span className="font-medium text-slate-700">Tenant:</span> {previewAgreement.tenant_name_snapshot || '-'}</div>
+              <div><span className="font-medium text-slate-700">Landlord:</span> {previewAgreement.landlord_name || 'Lee Robertson'}</div>
+              <div><span className="font-medium text-slate-700">Property:</span> {previewAgreement.property_address_snapshot || '-'}</div>
+              <div><span className="font-medium text-slate-700">Status:</span> {previewAgreement.status}</div>
+            </div>
+
+            {previewAgreement.status === 'signed' && (
+              <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                Signed agreement: keep this version as the record. Create a new version for any changed terms.
+              </div>
+            )}
+
+            <pre className="whitespace-pre-wrap rounded-lg border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-800 shadow-inner">
+              {agreementText(previewAgreement)}
             </pre>
           </div>
         </div>
@@ -858,6 +980,7 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
           tenant.payment_status,
           <div className="space-y-2">
             {agreementLoading ? <div className="text-xs text-slate-500">Loading agreements...</div> : agreementPanel(tenant)}
+            {agreementNotice && <div className="text-xs text-emerald-700">{agreementNotice}</div>}
             {agreementError && <div className="text-xs text-rose-600">{agreementError}</div>}
           </div>,
           <Actions onEdit={() => startEdit(tenant)} onDelete={() => remove(tenant.id)} />,
