@@ -959,6 +959,19 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
         <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800">
           {docusignStatus?.ready ? 'DocuSign is configured. Use Send via DocuSign to email the tenant for signing.' : 'DocuSign setup missing: ' + ((docusignStatus?.missing || ['not checked']).join(', ')) + '. Manual fallback is still available.'}
         </div>
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
+          <p className="font-semibold text-slate-900">DocuSign setup guide</p>
+          <p className="mt-1">Manual signing still works while DocuSign is missing. Add the demo or live DocuSign values in TrueNAS only when you are ready to test automatic signing.</p>
+          <div className="mt-2 grid gap-2 md:grid-cols-2">
+            {['DOCUSIGN_INTEGRATION_KEY', 'DOCUSIGN_USER_ID', 'DOCUSIGN_ACCOUNT_ID', 'DOCUSIGN_PRIVATE_KEY', 'DOCUSIGN_BASE_URL=https://demo.docusign.net', 'DOCUSIGN_OAUTH_BASE_URL=account-d.docusign.com'].map(item => (
+              <code key={item} className="rounded border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700">{item}</code>
+            ))}
+          </div>
+          {!docusignStatus?.ready && (
+            <p className="mt-2 text-amber-700">Missing now: {(docusignStatus?.missing || ['not checked']).join(', ')}</p>
+          )}
+          <p className="mt-2 text-slate-500">Paste the private key into TrueNAS as one line using \n between certificate lines. Keep these keys out of GitHub.</p>
+        </div>
         {agreements.map(agreement => (
           <div key={agreement.id} className="rounded-lg border border-slate-200 bg-white p-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1991,7 +2004,7 @@ function LicenceManagement() {
 
 function AdminSafetyChecks() {
   const [checkingHealth, setCheckingHealth] = useState(false);
-  const webBuildVersion = 'v55';
+  const webBuildVersion = 'v56';
   const [healthStatus, setHealthStatus] = useState<'not_checked' | 'ok' | 'error'>('not_checked');
   const [healthMessage, setHealthMessage] = useState('Not checked in this browser session.');
   const [apiBuildVersion, setApiBuildVersion] = useState('not checked');
