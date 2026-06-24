@@ -1426,7 +1426,7 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
               <div>
                 <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">Tenant record</p>
                 <h2 className="mt-1 text-2xl font-bold text-slate-900">{selectedTenant.name}</h2>
-                <p className="mt-1 text-sm text-slate-600">{selectedTenant.property?.address || 'No property assigned'} · {selectedTenant.email || 'No email saved'}</p>
+                <p className="mt-1 text-sm text-slate-600">{selectedTenant.property?.address || 'No property assigned'} - {selectedTenant.email || 'No email saved'}</p>
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button variant="secondary" onClick={() => { setSelectedTenantId(''); setShowTenantSetupTools(false); setLegacyAgreementFile(null); }}>Back to tenant list</Button>
@@ -1453,7 +1453,7 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
                 <p className="text-xs uppercase tracking-wide text-slate-500">Records</p>
                 <p className="text-slate-700">Agreements: {selectedTenantAgreements.length}</p>
                 <p className="text-slate-700">Rent: {selectedTenantRent.length}</p>
-                <p className="text-slate-700">Docs: {selectedTenantDocuments.length} · Requests: {selectedTenantRepairs.length}</p>
+                <p className="text-slate-700">Docs: {selectedTenantDocuments.length} - Requests: {selectedTenantRepairs.length}</p>
               </div>
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
                 <p className="text-xs uppercase tracking-wide text-slate-500">Portal</p>
@@ -1893,6 +1893,28 @@ function Documents({ data, refresh, user }: { data: DashboardData; refresh: () =
     });
   }
 
+  function setDocumentType(value: DocType | '') {
+    const nextType = value || 'other';
+
+    if (nextType === 'tenancy_agreement' && documentAudience !== 'tenant') {
+      setDocumentAudience('tenant');
+      setForm({
+        ...form,
+        doc_type: nextType,
+        tenant_id: form.tenant_id || '',
+        property_id: tenantPropertyId(form.tenant_id || '') || form.property_id || '',
+      });
+      return;
+    }
+
+    setForm({ ...form, doc_type: nextType });
+  }
+
+  function tenantOptionLabel(tenant: Tenant) {
+    const propertyName = tenant.property?.address || propertyAddress(tenant.property_id || tenant.property?.id);
+    return tenant.name + (propertyName && propertyName !== 'All properties' ? ' - ' + propertyName : '');
+  }
+
   function startEdit(document: DocumentRecord) {
     const documentPropertyId = document.property_id || document.property?.id || '';
     const nextAudience = document.tenant_id ? 'tenant' : documentPropertyId ? 'property' : 'all';
@@ -1991,29 +2013,43 @@ function Documents({ data, refresh, user }: { data: DashboardData; refresh: () =
 
       {user.role === 'admin' && (
         <CrudLayout title={editing ? 'Edit document' : 'Add document'} onSubmit={submit} onCancel={reset} editing={Boolean(editing)} hideTable>
-          <Select<'all' | 'property' | 'tenant'> label="Share with" value={documentAudience} onChange={setAudience}>
-            <option value="all">All tenants</option>
-            <option value="tenant">One tenant</option>
-            <option value="property">One property</option>
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800 md:col-span-3">
+            <p className="font-semibold text-blue-950">Attach this document to the right place</p>
+            <p className="mt-1">Use Property for gas safety, EPC, EICR and house documents. Use Tenant for tenancy agreements, ID checks, deposit protection and tenant-specific files.</p>
+          </div>
+
+          <Select<'all' | 'property' | 'tenant'> label="Attach document to" value={documentAudience} onChange={setAudience}>
+            <option value="all">General - visible to all tenants</option>
+            <option value="property">Property - linked to one property</option>
+            <option value="tenant">Tenant - linked to one tenant and their property</option>
           </Select>
 
           {documentAudience === 'tenant' && (
-            <Select<string> label="Tenant (auto-fills property)" value={fieldValue(form.tenant_id)} onChange={setDocumentTenant}>
+            <Select<string> label={form.doc_type === 'tenancy_agreement' ? 'Tenant for tenancy agreement' : 'Tenant'} value={fieldValue(form.tenant_id)} onChange={setDocumentTenant}>
               <option value="">Choose tenant</option>
-              {data.tenants.map(tenant => <option key={tenant.id} value={tenant.id}>{tenant.name}</option>)}
+              {data.tenants.map(tenant => <option key={tenant.id} value={tenant.id}>{tenantOptionLabel(tenant)}</option>)}
             </Select>
           )}
 
           {documentAudience === 'property' && (
             <Select<string> label="Property" value={fieldValue(form.property_id)} onChange={setDocumentProperty}>
               <option value="">Choose property</option>
-              {data.properties.map(property => <option key={property.id} value={property.id}>{property.address}</option>)}
+              {data.properties.map(property => {
+                const tenantCount = data.tenants.filter(tenant => (tenant.property_id || tenant.property?.id) === property.id).length;
+                return <option key={property.id} value={property.id}>{property.address}{tenantCount ? ' - ' + tenantCount + ' tenant' + (tenantCount === 1 ? '' : 's') : ''}</option>;
+              })}
             </Select>
           )}
 
           {documentAudience === 'tenant' && form.property_id && (
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
-              Property auto-filled: <span className="font-medium text-slate-800">{propertyAddress(form.property_id)}</span>
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+              Linked property: <span className="font-medium text-emerald-950">{propertyAddress(form.property_id)}</span>
+            </div>
+          )}
+
+          {form.doc_type === 'tenancy_agreement' && documentAudience === 'tenant' && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              Tenancy agreements are tenant-linked. Choose the tenant above and the property link is filled automatically.
             </div>
           )}
 
@@ -2024,7 +2060,7 @@ function Documents({ data, refresh, user }: { data: DashboardData; refresh: () =
           )}
 
           <Input label="Name" value={fieldValue(form.name)} onChange={value => setForm({ ...form, name: value })} required />
-          <Select<DocType> label="Document type" value={(form.doc_type as DocType) || 'other'} onChange={value => setForm({ ...form, doc_type: value || 'other' })}>
+          <Select<DocType> label="Document type" value={(form.doc_type as DocType) || 'other'} onChange={setDocumentType}>
             <option value="tenancy_agreement">Tenancy agreement</option>
             <option value="gas_safety">Gas safety</option>
             <option value="epc">EPC</option>
@@ -2049,8 +2085,14 @@ function Documents({ data, refresh, user }: { data: DashboardData; refresh: () =
           document.doc_type === 'tenancy_agreement' ? (
             <span className="inline-flex rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">Signed tenancy agreement</span>
           ) : document.doc_type,
-          document.property?.address || propertyAddress(document.property_id),
-          document.tenant?.name || tenantName(document.tenant_id),
+          <div className="text-sm">
+            <p className="font-medium text-slate-800">{document.property?.address || propertyAddress(document.property_id)}</p>
+            <p className="text-xs text-slate-500">{document.tenant_id ? 'Auto-linked from tenant' : document.property_id ? 'Property document' : 'General document'}</p>
+          </div>,
+          <div className="text-sm">
+            <p className="font-medium text-slate-800">{document.tenant?.name || tenantName(document.tenant_id)}</p>
+            <p className="text-xs text-slate-500">{document.doc_type === 'tenancy_agreement' ? 'Tenancy agreement owner' : document.tenant_id ? 'Tenant-specific document' : 'Not tenant-specific'}</p>
+          </div>,
           dateOnly(document.expiry_date) || '-',
           document.file_url ? (
             <a key={`${document.id}-file`} className="inline-flex min-h-10 items-center rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100" href={api.documentFileUrl(document.file_url)} target="_blank" rel="noreferrer">
@@ -2356,7 +2398,7 @@ function LicenceManagement() {
 
 function AdminSafetyChecks() {
   const [checkingHealth, setCheckingHealth] = useState(false);
-  const webBuildVersion = 'v67';
+  const webBuildVersion = 'v68';
   const [healthStatus, setHealthStatus] = useState<'not_checked' | 'ok' | 'error'>('not_checked');
   const [healthMessage, setHealthMessage] = useState('Not checked in this browser session.');
   const [apiBuildVersion, setApiBuildVersion] = useState('not checked');
