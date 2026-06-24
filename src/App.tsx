@@ -2679,6 +2679,7 @@ function Admin({ data }: { data: DashboardData; refresh: () => Promise<void> }) 
   const [accounts, setAccounts] = useState<AdminAccount[]>([]);
   const [editing, setEditing] = useState<AdminAccount | null>(null);
   const [form, setForm] = useState<AdminAccountPayload>({ name: '', email: '', password: '', role: 'tenant', tenant_id: null, active: true });
+  const [resettingPasswordId, setResettingPasswordId] = useState<string | null>(null);
 
   async function loadAccounts() {
     const rows = await api.listAdminAccounts();
@@ -2707,6 +2708,25 @@ function Admin({ data }: { data: DashboardData; refresh: () => Promise<void> }) 
     else await api.createAdminAccount(payload);
     reset();
     await loadAccounts();
+  }
+
+  async function resetAccountPassword(account: AdminAccount) {
+    const password = window.prompt('Enter a new password for ' + account.email + ', or leave blank to generate one.');
+    if (password === null) return;
+
+    const confirmed = window.confirm('Reset password for ' + account.email + '?');
+    if (!confirmed) return;
+
+    setResettingPasswordId(account.id);
+    try {
+      const result = await api.adminResetPassword(account.id, password);
+      window.alert('Password reset for ' + result.account.email + '. New password: ' + result.temporary_password);
+      await loadAccounts();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Could not reset password.');
+    } finally {
+      setResettingPasswordId(null);
+    }
   }
 
   return (
