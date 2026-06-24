@@ -243,6 +243,8 @@ export const api = {
       method: 'DELETE',
     }),
 
+  listLoginAudit: () => request<LoginAudit[]>('/admin/login-audit'),
+
   listAdminAccounts: () => request<AdminAccount[]>('/admin/accounts'),
 
   createAdminAccount: (account: AdminAccountPayload) =>

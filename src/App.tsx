@@ -2675,6 +2675,61 @@ function TrashBin() {
   );
 }
 
+function LoginActivity() {
+  const [rows, setRows] = useState<LoginAudit[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  async function load() {
+    setLoading(true);
+    setError('');
+    try {
+      setRows(await api.listLoginAudit());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load login activity');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void load();
+  }, []);
+
+  function when(value: string) {
+    if (!value) return '-';
+    return new Date(value).toLocaleString();
+  }
+
+  return (
+    <Card title="Login activity">
+      <div className="mb-4 flex flex-col justify-between gap-3 md:flex-row md:items-center">
+        <div>
+          <p className="text-sm text-slate-600">Shows the latest 100 login attempts, including successful and failed logins.</p>
+          <p className="mt-1 text-xs text-slate-500">Useful for checking whether tenants have signed in.</p>
+        </div>
+        <Button variant="secondary" disabled={loading} onClick={() => void load()}>
+          {loading ? 'Refreshing...' : 'Refresh logins'}
+        </Button>
+      </div>
+
+      {error && <p className="mb-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
+
+      <Table
+        columns={['When', 'Email', 'Result', 'Role', 'Tenant', 'IP']}
+        rows={rows.map(row => [
+          when(row.created_at),
+          row.email,
+          row.success ? 'Success' : 'Failed' + (row.failure_reason ? ' - ' + row.failure_reason : ''),
+          row.role || '-',
+          row.tenant_name || row.tenant_id || '-',
+          row.ip_address || '-',
+        ])}
+      />
+    </Card>
+  );
+}
+
 function Admin({ data }: { data: DashboardData; refresh: () => Promise<void> }) {
   const [accounts, setAccounts] = useState<AdminAccount[]>([]);
   const [editing, setEditing] = useState<AdminAccount | null>(null);

@@ -422,24 +422,97 @@ app.post('/license/check', async (req, res) => {
 });
 
 
-app.get('/health', (_req, res) => res.json({ ok: true, app: 'PropManagerr API', version: 'v71' }));
+async function ensureLoginAuditTable() {
+  await query(`
+    create table if not exists login_audit (
+      id text primary key,
+      email text not null,
+      user_id text,
+      role text,
+      tenant_id text,
+      success boolean not null default false,
+      failure_reason text,
+      ip_address text,
+      user_agent text,
+      created_at timestamptz not null default now()
+    )
+  `);
+
+  await query('create index if not exists idx_login_audit_created_at on login_audit(created_at desc)');
+  await query('create index if not exists idx_login_audit_email on login_audit(lower(email))');
+}
+
+ensureLoginAuditTable().catch(error => {
+  console.error('Failed to initialise login audit table', error);
+});
+
+async function recordLoginAudit(req, details) {
+  try {
+    await query(
+      `insert into login_audit
+        (id, email, user_id, role, tenant_id, success, failure_reason, ip_address, user_agent)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [
+        crypto.randomUUID(),
+        String(details.email || '').trim(),
+        details.user_id || null,
+        details.role || null,
+        details.tenant_id || null,
+        Boolean(details.success),
+        details.failure_reason || null,
+        req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || null,
+        req.headers['user-agent'] || null,
+      ]
+    );
+  } catch (error) {
+    console.error('Failed to record login audit', error);
+  }
+}
+
+app.get('/health', (_req, res) => res.json({ ok: true, app: 'PropManagerr API', version: 'v72' }));
 
 app.post('/auth/login', async (req, res) => {
   const { email, password } = req.body || {};
-  if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
+  const loginEmail = String(email || '').trim();
+
+  if (!loginEmail || !password) {
+    await recordLoginAudit(req, {
+      email: loginEmail || 'missing-email',
+      success: false,
+      failure_reason: 'Email and password required',
+    });
+    return res.status(400).json({ error: 'Email and password required' });
+  }
 
   const { rows } = await query(
     'select id, name, email, role, tenant_id, password_hash from app_users where lower(email)=lower($1) and active=true',
-    [email]
+    [loginEmail]
   );
 
   let user = rows[0];
   if (!user || !(await comparePassword(password, user.password_hash))) {
+    await recordLoginAudit(req, {
+      email: loginEmail,
+      user_id: user?.id || null,
+      role: user?.role || null,
+      tenant_id: user?.tenant_id || null,
+      success: false,
+      failure_reason: 'Invalid login',
+    });
     return res.status(401).json({ error: 'Invalid login' });
   }
 
   delete user.password_hash;
   user = await resolveTenantAccountLink(user);
+
+  await recordLoginAudit(req, {
+    email: user.email,
+    user_id: user.id,
+    role: user.role,
+    tenant_id: user.tenant_id || null,
+    success: true,
+  });
+
   res.json({ token: signUser(user), user });
 });
 
@@ -469,6 +542,29 @@ app.post('/auth/change-password', requireAuth, async (req, res) => {
 
   await query('update app_users set password_hash=$2 where id=$1', [account.id, await hashPassword(new_password)]);
   res.json({ ok: true });
+});
+
+app.get('/admin/login-audit', requireAuth, requireAdmin, async (_req, res) => {
+  const { rows } = await query(`
+    select
+      la.id,
+      la.email,
+      la.user_id,
+      la.role,
+      la.tenant_id,
+      la.success,
+      la.failure_reason,
+      la.ip_address,
+      la.user_agent,
+      la.created_at,
+      t.name as tenant_name
+    from login_audit la
+    left join tenants t on t.id = la.tenant_id
+    order by la.created_at desc
+    limit 100
+  `);
+
+  res.json(rows);
 });
 
 app.get('/admin/accounts', requireAuth, requireAdmin, async (_req, res) => {
