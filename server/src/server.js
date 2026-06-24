@@ -469,7 +469,7 @@ async function recordLoginAudit(req, details) {
   }
 }
 
-app.get('/health', (_req, res) => res.json({ ok: true, app: 'PropManagerr API', version: 'v73' }));
+app.get('/health', (_req, res) => res.json({ ok: true, app: 'PropManagerr API', version: 'v74' }));
 
 app.post('/auth/login', async (req, res) => {
   const { email, password } = req.body || {};
@@ -545,26 +545,32 @@ app.post('/auth/change-password', requireAuth, async (req, res) => {
 });
 
 app.get('/admin/login-audit', requireAuth, requireAdmin, async (_req, res) => {
-  const { rows } = await query(`
-    select
-      la.id,
-      la.email,
-      la.user_id,
-      la.role,
-      la.tenant_id,
-      la.success,
-      la.failure_reason,
-      la.ip_address,
-      la.user_agent,
-      la.created_at,
-      t.name as tenant_name
-    from login_audit la
-    left join tenants t on t.id = la.tenant_id
-    order by la.created_at desc
-    limit 100
-  `);
+  try {
+    await ensureLoginAuditTable();
 
-  res.json(rows);
+    const { rows } = await query(`
+      select
+        id,
+        email,
+        user_id,
+        role,
+        tenant_id,
+        null as tenant_name,
+        success,
+        failure_reason,
+        ip_address,
+        user_agent,
+        created_at
+      from login_audit
+      order by created_at desc
+      limit 100
+    `);
+
+    res.json(rows);
+  } catch (error) {
+    console.error('Failed to load login audit', error);
+    res.status(500).json({ error: 'Could not load login activity' });
+  }
 });
 
 app.get('/admin/accounts', requireAuth, requireAdmin, async (_req, res) => {
