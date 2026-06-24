@@ -2787,6 +2787,7 @@ function Admin({ data }: { data: DashboardData; refresh: () => Promise<void> }) 
   return (
     <div className="space-y-8">
       <AdminSafetyChecks />
+      <LoginActivity />
       <BackupExportTools />
       <TrashBin />
 
