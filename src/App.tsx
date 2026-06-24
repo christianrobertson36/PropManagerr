@@ -87,8 +87,8 @@ function daysUntil(dateStr: string | null | undefined): number | null {
 
 function money(value: number | string | null | undefined): string {
   const numeric = typeof value === 'string' ? Number(value) : value;
-  if (numeric === null || numeric === undefined || Number.isNaN(numeric)) return '£0.00';
-  return `£${numeric.toFixed(2)}`;
+  if (numeric === null || numeric === undefined || Number.isNaN(numeric)) return '£' + '0.00';
+  return '£' + numeric.toFixed(2);
 }
 
 function fieldValue(value: string | number | null | undefined): string {
@@ -1263,7 +1263,7 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
     return !tenantPropertyFilter || tenantPropertyId === tenantPropertyFilter;
   });
   const selectedTenant = selectedTenantId ? data.tenants.find(tenant => tenant.id === selectedTenantId) || null : null;
-  const filteredTenants = tenantOptions.filter(tenant => !selectedTenantId || tenant.id === selectedTenantId);
+  const filteredTenants = tenantOptions;
   const selectedTenantProperty = tenantPropertyFilter ? data.properties.find(property => property.id === tenantPropertyFilter) || null : null;
   const selectedTenantAgreements = selectedTenant ? agreementsByTenant[selectedTenant.id] || [] : [];
   const selectedTenantRent = selectedTenant ? data.rentPayments.filter(payment => payment.tenant_id === selectedTenant.id) : [];
@@ -1390,119 +1390,122 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
         </div>
       )}
 
-      <Card title="Filter tenants">
+      <Card title="Tenant list">
         <div className="grid gap-4 md:grid-cols-3">
           <Select<string> label="Show property" value={tenantPropertyFilter} onChange={value => { setTenantPropertyFilter(value || ''); setSelectedTenantId(''); setShowTenantSetupTools(false); setLegacyAgreementFile(null); }}>
             <option value="">All properties</option>
             {data.properties.map(property => <option key={property.id} value={property.id}>{property.address}</option>)}
           </Select>
-          <Select<string> label="Select tenant" value={selectedTenantId} onChange={value => { setSelectedTenantId(value || ''); setShowTenantSetupTools(false); setLegacyAgreementFile(null); }}>
-            <option value="">All tenants</option>
-            {tenantOptions.map(tenant => <option key={tenant.id} value={tenant.id}>{tenant.name} - {tenant.property?.address || 'Unassigned'}</option>)}
-          </Select>
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-            <p className="font-medium text-slate-900">{selectedTenant ? selectedTenant.name : tenantPropertyFilter ? selectedTenantProperty?.address || 'Selected property' : 'All properties'}</p>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 md:col-span-2">
+            <p className="font-medium text-slate-900">{tenantPropertyFilter ? selectedTenantProperty?.address || 'Selected property' : 'All properties'}</p>
             <p>{filteredTenants.length} of {data.tenants.length} tenants shown.</p>
-            <p className="text-xs text-slate-500">Choose a tenant to show only that tenant and their connected records.</p>
+            <p className="text-xs text-slate-500">Click Open tenant to view that tenant's full record, tenancy tools, legacy upload, digital agreement and portal setup.</p>
           </div>
         </div>
       </Card>
 
+      {!selectedTenant && (
+        <Table
+          columns={['Name', 'Email', 'Property', 'Lease end', 'Status', 'Open', 'Actions']}
+          rows={filteredTenants.map(tenant => [
+            tenant.name,
+            tenant.email,
+            <div className="min-w-48 text-sm"><p className="font-medium text-slate-800">{tenant.property?.address || 'Unassigned'}</p><p className="text-xs text-slate-500">Connected property</p></div>,
+            dateOnly(tenant.lease_end) || '-',
+            tenant.payment_status,
+            <Button variant="primary" onClick={() => { setSelectedTenantId(tenant.id); setShowTenantSetupTools(true); setLegacyAgreementFile(null); }}>Open tenant</Button>,
+            <Actions onEdit={() => startEdit(tenant)} onDelete={() => remove(tenant)} />,
+          ])}
+        />
+      )}
+
       {selectedTenant && (
-        <Card title="Selected tenant summary">
-          <div className="grid gap-4 md:grid-cols-4">
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
-              <p className="text-xs uppercase tracking-wide text-slate-500">Tenant</p>
-              <p className="font-semibold text-slate-900">{selectedTenant.name}</p>
-              <p className="text-slate-600">{selectedTenant.email || 'No email saved'}</p>
-            </div>
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
-              <p className="text-xs uppercase tracking-wide text-slate-500">Connected property</p>
-              <p className="font-semibold text-slate-900">{selectedTenant.property?.address || 'Unassigned'}</p>
-              <p className="text-slate-600">Lease ends: {dateOnly(selectedTenant.lease_end) || '-'}</p>
-            </div>
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
-              <p className="text-xs uppercase tracking-wide text-slate-500">Records</p>
-              <p className="text-slate-700">Agreements: {selectedTenantAgreements.length}</p>
-              <p className="text-slate-700">Rent: {selectedTenantRent.length} · Docs: {selectedTenantDocuments.length} · Repairs: {selectedTenantRepairs.length}</p>
-            </div>
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
-              <p className="text-xs uppercase tracking-wide text-slate-500">Portal</p>
-              <p className={selectedTenantHasActivePortal ? 'font-semibold text-emerald-700' : 'font-semibold text-amber-700'}>{selectedTenantHasActivePortal ? 'Login active' : 'Login not active'}</p>
-              <div className="mt-3 flex flex-wrap gap-2">
+        <div className="space-y-6">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">Tenant record</p>
+                <h2 className="mt-1 text-2xl font-bold text-slate-900">{selectedTenant.name}</h2>
+                <p className="mt-1 text-sm text-slate-600">{selectedTenant.property?.address || 'No property assigned'} · {selectedTenant.email || 'No email saved'}</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="secondary" onClick={() => { setSelectedTenantId(''); setShowTenantSetupTools(false); setLegacyAgreementFile(null); }}>Back to tenant list</Button>
+                <Button variant="secondary" onClick={() => startEdit(selectedTenant)}>Edit tenant</Button>
                 <Button variant="primary" onClick={() => setPreviewTenant(selectedTenant)}>View tenant portal</Button>
-                <Button variant="secondary" onClick={() => void copyTenantPortalSetup(selectedTenant)}>Copy setup</Button>
               </div>
             </div>
           </div>
-        </Card>
-      )}
 
-
-      {selectedTenant && (
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-900">Tenancy options</h2>
-              <p className="text-sm text-slate-600">Keep legacy paper agreements on file now, then create a digital agreement when ready.</p>
+          <Card title="Tenant summary">
+            <div className="grid gap-4 md:grid-cols-4">
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+                <p className="text-xs uppercase tracking-wide text-slate-500">Tenant</p>
+                <p className="font-semibold text-slate-900">{selectedTenant.name}</p>
+                <p className="text-slate-600">{selectedTenant.email || 'No email saved'}</p>
+                <p className="text-slate-600">{selectedTenant.phone || 'No phone saved'}</p>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+                <p className="text-xs uppercase tracking-wide text-slate-500">Connected property</p>
+                <p className="font-semibold text-slate-900">{selectedTenant.property?.address || 'Unassigned'}</p>
+                <p className="text-slate-600">Lease: {dateOnly(selectedTenant.lease_start) || '-'} to {dateOnly(selectedTenant.lease_end) || '-'}</p>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+                <p className="text-xs uppercase tracking-wide text-slate-500">Records</p>
+                <p className="text-slate-700">Agreements: {selectedTenantAgreements.length}</p>
+                <p className="text-slate-700">Rent: {selectedTenantRent.length}</p>
+                <p className="text-slate-700">Docs: {selectedTenantDocuments.length} · Requests: {selectedTenantRepairs.length}</p>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+                <p className="text-xs uppercase tracking-wide text-slate-500">Portal</p>
+                <p className={selectedTenantHasActivePortal ? 'font-semibold text-emerald-700' : 'font-semibold text-amber-700'}>{selectedTenantHasActivePortal ? 'Login active' : 'Login not active'}</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button variant="secondary" onClick={() => void copyTenantPortalSetup(selectedTenant)}>Copy setup</Button>
+                </div>
+              </div>
             </div>
-            <Button variant="secondary" onClick={() => setShowTenantSetupTools(!showTenantSetupTools)}>
-              {showTenantSetupTools ? 'Hide setup tools' : 'Show setup tools'}
-            </Button>
-          </div>
+          </Card>
+
+          <Card title="Tenancy options">
+            <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+              These tools are now inside the single tenant record. Use legacy upload for an existing paper agreement, or digital agreement when you are ready to create/send a new agreement.
+            </div>
+            <div className="grid gap-4 lg:grid-cols-3">
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">
+                <p className="font-semibold text-slate-900">Legacy agreement upload</p>
+                <p className="mt-1 text-slate-600">Upload a scan, photo, PDF or document for an agreement that already exists outside the system.</p>
+                <input
+                  className="mt-3 block w-full text-sm text-slate-700"
+                  type="file"
+                  accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.txt"
+                  onChange={event => setLegacyAgreementFile(event.target.files?.[0] || null)}
+                />
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <Button variant="primary" disabled={!legacyAgreementFile || legacyAgreementSaving} onClick={() => void saveLegacyAgreement(selectedTenant)}>
+                    {legacyAgreementSaving ? 'Saving...' : 'Save legacy agreement'}
+                  </Button>
+                  {legacyAgreementFile && <span className="text-xs text-slate-500">{legacyAgreementFile.name}</span>}
+                </div>
+                {agreementNotice && <div className="mt-3 text-xs text-emerald-700">{agreementNotice}</div>}
+                {agreementError && <div className="mt-3 text-xs text-rose-600">{agreementError}</div>}
+              </div>
+
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">
+                <p className="font-semibold text-slate-900">Digital agreement</p>
+                <p className="mt-1 text-slate-600">Create, preview, print, download or send a digital agreement for this tenant.</p>
+                <div className="mt-3">
+                  {agreementLoading ? <div className="text-xs text-slate-500">Loading agreements...</div> : agreementPanel(selectedTenant)}
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">
+                <p className="font-semibold text-slate-900">Tenant portal</p>
+                <p className="mt-1 text-slate-600">Create or check portal login access for this tenant.</p>
+                <div className="mt-3">{tenantPortalPanel(selectedTenant)}</div>
+              </div>
+            </div>
+          </Card>
         </div>
       )}
-
-      {selectedTenant && showTenantSetupTools && (
-        <Card title="Tenancy setup tools">
-          <div className="grid gap-4 lg:grid-cols-3">
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">
-              <p className="font-semibold text-slate-900">Legacy agreement upload</p>
-              <p className="mt-1 text-slate-600">Use this where the tenant already has a signed paper agreement. Upload a scan, photo or PDF and it will be saved as a tenancy agreement document.</p>
-              <input
-                className="mt-3 block w-full text-sm text-slate-700"
-                type="file"
-                accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.txt"
-                onChange={event => setLegacyAgreementFile(event.target.files?.[0] || null)}
-              />
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <Button variant="primary" disabled={!legacyAgreementFile || legacyAgreementSaving} onClick={() => void saveLegacyAgreement(selectedTenant)}>
-                  {legacyAgreementSaving ? 'Saving...' : 'Save legacy agreement'}
-                </Button>
-                {legacyAgreementFile && <span className="text-xs text-slate-500">{legacyAgreementFile.name}</span>}
-              </div>
-              {agreementNotice && <div className="mt-3 text-xs text-emerald-700">{agreementNotice}</div>}
-              {agreementError && <div className="mt-3 text-xs text-rose-600">{agreementError}</div>}
-            </div>
-
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">
-              <p className="font-semibold text-slate-900">Digital agreement</p>
-              <p className="mt-1 text-slate-600">Create or manage a digital draft separately. This does not replace the legacy paper copy until you decide to use it.</p>
-              <div className="mt-3">
-                {agreementLoading ? <div className="text-xs text-slate-500">Loading agreements...</div> : agreementPanel(selectedTenant)}
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">
-              <p className="font-semibold text-slate-900">Tenant portal</p>
-              <p className="mt-1 text-slate-600">Only set this up when you are ready to give the tenant portal access.</p>
-              <div className="mt-3">{tenantPortalPanel(selectedTenant)}</div>
-            </div>
-          </div>
-        </Card>
-      )}
-
-      <Table
-        columns={['Name', 'Email', 'Property', 'Lease end', 'Status', 'Actions']}
-        rows={filteredTenants.map(tenant => [
-          tenant.name,
-          tenant.email,
-          <div className="min-w-48 text-sm"><p className="font-medium text-slate-800">{tenant.property?.address || 'Unassigned'}</p><p className="text-xs text-slate-500">Connected property</p></div>,
-          dateOnly(tenant.lease_end) || '-',
-          tenant.payment_status,
-          <Actions onEdit={() => startEdit(tenant)} onDelete={() => remove(tenant)} />,
-        ])}
-      />
     </CrudLayout>
   );
 }
@@ -2353,7 +2356,7 @@ function LicenceManagement() {
 
 function AdminSafetyChecks() {
   const [checkingHealth, setCheckingHealth] = useState(false);
-  const webBuildVersion = 'v65';
+  const webBuildVersion = 'v66';
   const [healthStatus, setHealthStatus] = useState<'not_checked' | 'ok' | 'error'>('not_checked');
   const [healthMessage, setHealthMessage] = useState('Not checked in this browser session.');
   const [apiBuildVersion, setApiBuildVersion] = useState('not checked');
@@ -2883,6 +2886,7 @@ export default function App() {
     </div>
   );
 }
+
 
 
 

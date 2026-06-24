@@ -422,7 +422,7 @@ app.post('/license/check', async (req, res) => {
 });
 
 
-app.get('/health', (_req, res) => res.json({ ok: true, app: 'PropManagerr API', version: 'v65' }));
+app.get('/health', (_req, res) => res.json({ ok: true, app: 'PropManagerr API', version: 'v66' }));
 
 app.post('/auth/login', async (req, res) => {
   const { email, password } = req.body || {};
