@@ -82,6 +82,46 @@ export function TenantPortal({ data, user, refresh }: { data: DashboardData; use
   const [uploadSaving, setUploadSaving] = useState(false);
   const [uploadNotice, setUploadNotice] = useState('');
   const [uploadError, setUploadError] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [passwordNotice, setPasswordNotice] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+
+  async function submitPasswordChange(event: React.FormEvent) {
+    event.preventDefault();
+    setPasswordNotice('');
+    setPasswordError('');
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setPasswordError('Fill in all password fields.');
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      setPasswordError('New password must be at least 8 characters.');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPasswordError('New password and confirmation do not match.');
+      return;
+    }
+
+    setPasswordSaving(true);
+    try {
+      await api.changePassword(currentPassword, newPassword);
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setPasswordNotice('Password changed. Use the new password next time you sign in.');
+    } catch (err) {
+      setPasswordError(err instanceof Error ? err.message : 'Could not change password.');
+    } finally {
+      setPasswordSaving(false);
+    }
+  }
 
   async function submitTenantUpload(event: React.FormEvent) {
     event.preventDefault();
@@ -212,6 +252,60 @@ export function TenantPortal({ data, user, refresh }: { data: DashboardData; use
             <p className="text-sm text-slate-600">No property assigned yet.</p>
           )}
         </TenantCard>
+
+
+        <TenantCard title="Change my password">
+          <form onSubmit={submitPasswordChange} className="space-y-4">
+            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+              Use this to set your own password after receiving a temporary login. Keep it private and do not share it.
+            </div>
+
+            <label className="block text-sm font-medium text-slate-700">
+              Current password
+              <input
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-3 text-base focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                type="password"
+                value={currentPassword}
+                onChange={event => setCurrentPassword(event.target.value)}
+                autoComplete="current-password"
+              />
+            </label>
+
+            <label className="block text-sm font-medium text-slate-700">
+              New password
+              <input
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-3 text-base focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                type="password"
+                value={newPassword}
+                onChange={event => setNewPassword(event.target.value)}
+                autoComplete="new-password"
+              />
+            </label>
+
+            <label className="block text-sm font-medium text-slate-700">
+              Confirm new password
+              <input
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-3 text-base focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                type="password"
+                value={confirmPassword}
+                onChange={event => setConfirmPassword(event.target.value)}
+                autoComplete="new-password"
+              />
+            </label>
+
+            {passwordNotice && <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{passwordNotice}</div>}
+            {passwordError && <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{passwordError}</div>}
+
+            <button
+              type="submit"
+              disabled={passwordSaving}
+              className="w-full rounded-lg bg-slate-900 px-4 py-4 text-base font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {passwordSaving ? 'Changing...' : 'Change password'}
+            </button>
+          </form>
+        </TenantCard>
+
 
         <TenantCard title="My tenancy">
           {tenant ? (

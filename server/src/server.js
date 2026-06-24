@@ -422,7 +422,7 @@ app.post('/license/check', async (req, res) => {
 });
 
 
-app.get('/health', (_req, res) => res.json({ ok: true, app: 'PropManagerr API', version: 'v68' }));
+app.get('/health', (_req, res) => res.json({ ok: true, app: 'PropManagerr API', version: 'v69' }));
 
 app.post('/auth/login', async (req, res) => {
   const { email, password } = req.body || {};
@@ -446,6 +446,29 @@ app.post('/auth/login', async (req, res) => {
 app.get('/auth/me', requireAuth, async (req, res) => {
   const user = await resolveTenantAccountLink(req.user);
   res.json({ user });
+});
+
+app.post('/auth/change-password', requireAuth, async (req, res) => {
+  const { current_password, new_password } = req.body || {};
+  if (!current_password || !new_password) {
+    return res.status(400).json({ error: 'Current password and new password are required' });
+  }
+  if (String(new_password).length < 8) {
+    return res.status(400).json({ error: 'New password must be at least 8 characters' });
+  }
+
+  const { rows } = await query(
+    'select id, password_hash from app_users where id=$1 and active=true',
+    [req.user.id]
+  );
+  const account = rows[0];
+  if (!account) return res.status(404).json({ error: 'Account not found' });
+
+  const ok = await comparePassword(current_password, account.password_hash);
+  if (!ok) return res.status(403).json({ error: 'Current password is incorrect' });
+
+  await query('update app_users set password_hash=$2 where id=$1', [account.id, await hashPassword(new_password)]);
+  res.json({ ok: true });
 });
 
 app.get('/admin/accounts', requireAuth, requireAdmin, async (_req, res) => {
@@ -514,6 +537,24 @@ app.post('/admin/tenants/:id/portal-account', requireAuth, requireAdmin, async (
     if (err?.code === '23505') return res.status(409).json({ error: 'An account with this email already exists. Link it from Admin Accounts.' });
     throw err;
   }
+});
+
+app.post('/admin/accounts/:id/reset-password', requireAuth, requireAdmin, async (req, res) => {
+  const requestedPassword = String(req.body?.password || '').trim();
+  const temporaryPassword = requestedPassword || (crypto.randomBytes(9).toString('base64url') + 'A1!');
+  if (temporaryPassword.length < 8) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  }
+
+  const passwordHash = await hashPassword(temporaryPassword);
+  const { rows } = await query(
+    'update app_users set password_hash=$2 where id=$1 returning id, name, email, role, tenant_id, active',
+    [req.params.id, passwordHash]
+  );
+  const account = rows[0];
+  if (!account) return res.status(404).json({ error: 'Account not found' });
+
+  res.json({ account, temporary_password: temporaryPassword });
 });
 
 app.patch('/admin/accounts/:id', requireAuth, requireAdmin, async (req, res) => {

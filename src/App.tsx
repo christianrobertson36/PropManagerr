@@ -2398,7 +2398,7 @@ function LicenceManagement() {
 
 function AdminSafetyChecks() {
   const [checkingHealth, setCheckingHealth] = useState(false);
-  const webBuildVersion = 'v68';
+  const webBuildVersion = 'v69';
   const [healthStatus, setHealthStatus] = useState<'not_checked' | 'ok' | 'error'>('not_checked');
   const [healthMessage, setHealthMessage] = useState('Not checked in this browser session.');
   const [apiBuildVersion, setApiBuildVersion] = useState('not checked');
@@ -2736,7 +2736,12 @@ function Admin({ data }: { data: DashboardData; refresh: () => Promise<void> }) 
             account.role,
             account.tenant?.name || '-',
             account.active ? 'Yes' : 'No',
-            <Button variant="secondary" onClick={() => startEdit(account)}>Edit</Button>,
+            <div className="flex flex-wrap gap-2">
+              <Button variant="secondary" onClick={() => startEdit(account)}>Edit</Button>
+              <Button variant="secondary" disabled={resettingPasswordId === account.id} onClick={() => void resetAccountPassword(account)}>
+                {resettingPasswordId === account.id ? 'Resetting...' : 'Reset password'}
+              </Button>
+            </div>,
           ])}
         />
       </CrudLayout>

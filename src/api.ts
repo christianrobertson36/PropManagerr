@@ -214,6 +214,13 @@ export const api = {
     }),
 
   me: () => request<{ user: User }>('/auth/me'),
+
+  changePassword: (current_password: string, new_password: string) =>
+    request<{ ok: boolean }>('/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ current_password, new_password }),
+    }),
+
   dashboard: () => request<DashboardData>('/dashboard'),
   complianceUpdates: () => request<ComplianceUpdate[]>('/compliance/updates'),
 
@@ -249,6 +256,13 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(account),
     }),
+
+  adminResetPassword: (id: string, password?: string) =>
+    request<{ account: AdminAccount; temporary_password: string }>(`/admin/accounts/${id}/reset-password`, {
+      method: 'POST',
+      body: JSON.stringify({ password: password || '' }),
+    }),
+
 
   createTenantPortalAccount: (tenantId: string) =>
     request<{ account: AdminAccount; temporary_password?: string | null; existing?: boolean }>(`/admin/tenants/${tenantId}/portal-account`, {
