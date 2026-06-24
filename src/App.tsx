@@ -757,6 +757,9 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
   const [previewTenant, setPreviewTenant] = useState<Tenant | null>(null);
   const [tenantPropertyFilter, setTenantPropertyFilter] = useState('');
   const [selectedTenantId, setSelectedTenantId] = useState('');
+  const [showTenantSetupTools, setShowTenantSetupTools] = useState(false);
+  const [legacyAgreementFile, setLegacyAgreementFile] = useState<File | null>(null);
+  const [legacyAgreementSaving, setLegacyAgreementSaving] = useState(false);
   const agreementStatuses = ['draft', 'sent', 'signed', 'voided', 'expired'];
 
   async function loadTenantAgreements() {
@@ -859,6 +862,48 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
       setAgreementError(err instanceof Error ? err.message : 'Could not create tenancy agreement');
     } finally {
       setSavingAgreementId(null);
+    }
+  }
+
+
+  async function saveLegacyAgreement(tenant: Tenant) {
+    if (!legacyAgreementFile) {
+      window.alert('Choose the tenant paper agreement file first.');
+      return;
+    }
+
+    setLegacyAgreementSaving(true);
+    setAgreementError('');
+    setAgreementNotice('');
+    try {
+      const upload = await api.uploadDocument(legacyAgreementFile);
+      const title = 'Legacy paper tenancy agreement - ' + tenant.name;
+      await api.createDocument({
+        tenant_id: tenant.id,
+        property_id: tenant.property_id || null,
+        name: title,
+        doc_type: 'tenancy_agreement',
+        expiry_date: null,
+        file_url: upload.file_url,
+      });
+      await api.createTenancyAgreement({
+        tenant_id: tenant.id,
+        agreement_title: 'Legacy paper tenancy agreement',
+        status: 'signed',
+        landlord_name: 'Lee Robertson',
+        landlord_signed: true,
+        agreement_body: 'Legacy paper tenancy agreement uploaded to Documents. Original file: ' + upload.original_name,
+        signed_at: new Date().toISOString(),
+        signed_document_url: upload.file_url,
+        notes: 'Legacy paper agreement uploaded by admin. Digital agreement can be created separately later.',
+      });
+      setLegacyAgreementFile(null);
+      setAgreementNotice('Legacy paper agreement uploaded and linked to this tenant.');
+      await Promise.all([loadTenantAgreements(), refresh()]);
+    } catch (err) {
+      setAgreementError(err instanceof Error ? err.message : 'Could not save legacy agreement');
+    } finally {
+      setLegacyAgreementSaving(false);
     }
   }
 
@@ -1347,11 +1392,11 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
 
       <Card title="Filter tenants">
         <div className="grid gap-4 md:grid-cols-3">
-          <Select<string> label="Show property" value={tenantPropertyFilter} onChange={value => { setTenantPropertyFilter(value || ''); setSelectedTenantId(''); }}>
+          <Select<string> label="Show property" value={tenantPropertyFilter} onChange={value => { setTenantPropertyFilter(value || ''); setSelectedTenantId(''); setShowTenantSetupTools(false); setLegacyAgreementFile(null); }}>
             <option value="">All properties</option>
             {data.properties.map(property => <option key={property.id} value={property.id}>{property.address}</option>)}
           </Select>
-          <Select<string> label="Select tenant" value={selectedTenantId} onChange={value => setSelectedTenantId(value || '')}>
+          <Select<string> label="Select tenant" value={selectedTenantId} onChange={value => { setSelectedTenantId(value || ''); setShowTenantSetupTools(false); setLegacyAgreementFile(null); }}>
             <option value="">All tenants</option>
             {tenantOptions.map(tenant => <option key={tenant.id} value={tenant.id}>{tenant.name} - {tenant.property?.address || 'Unassigned'}</option>)}
           </Select>
@@ -1393,20 +1438,68 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
         </Card>
       )}
 
+
+      {selectedTenant && (
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">Tenancy options</h2>
+              <p className="text-sm text-slate-600">Keep legacy paper agreements on file now, then create a digital agreement when ready.</p>
+            </div>
+            <Button variant="secondary" onClick={() => setShowTenantSetupTools(!showTenantSetupTools)}>
+              {showTenantSetupTools ? 'Hide setup tools' : 'Show setup tools'}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {selectedTenant && showTenantSetupTools && (
+        <Card title="Tenancy setup tools">
+          <div className="grid gap-4 lg:grid-cols-3">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">
+              <p className="font-semibold text-slate-900">Legacy agreement upload</p>
+              <p className="mt-1 text-slate-600">Use this where the tenant already has a signed paper agreement. Upload a scan, photo or PDF and it will be saved as a tenancy agreement document.</p>
+              <input
+                className="mt-3 block w-full text-sm text-slate-700"
+                type="file"
+                accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.txt"
+                onChange={event => setLegacyAgreementFile(event.target.files?.[0] || null)}
+              />
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Button variant="primary" disabled={!legacyAgreementFile || legacyAgreementSaving} onClick={() => void saveLegacyAgreement(selectedTenant)}>
+                  {legacyAgreementSaving ? 'Saving...' : 'Save legacy agreement'}
+                </Button>
+                {legacyAgreementFile && <span className="text-xs text-slate-500">{legacyAgreementFile.name}</span>}
+              </div>
+              {agreementNotice && <div className="mt-3 text-xs text-emerald-700">{agreementNotice}</div>}
+              {agreementError && <div className="mt-3 text-xs text-rose-600">{agreementError}</div>}
+            </div>
+
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">
+              <p className="font-semibold text-slate-900">Digital agreement</p>
+              <p className="mt-1 text-slate-600">Create or manage a digital draft separately. This does not replace the legacy paper copy until you decide to use it.</p>
+              <div className="mt-3">
+                {agreementLoading ? <div className="text-xs text-slate-500">Loading agreements...</div> : agreementPanel(selectedTenant)}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">
+              <p className="font-semibold text-slate-900">Tenant portal</p>
+              <p className="mt-1 text-slate-600">Only set this up when you are ready to give the tenant portal access.</p>
+              <div className="mt-3">{tenantPortalPanel(selectedTenant)}</div>
+            </div>
+          </div>
+        </Card>
+      )}
+
       <Table
-        columns={['Name', 'Email', 'Property', 'Lease end', 'Status', 'Agreement', 'Portal', 'Actions']}
+        columns={['Name', 'Email', 'Property', 'Lease end', 'Status', 'Actions']}
         rows={filteredTenants.map(tenant => [
           tenant.name,
           tenant.email,
           <div className="min-w-48 text-sm"><p className="font-medium text-slate-800">{tenant.property?.address || 'Unassigned'}</p><p className="text-xs text-slate-500">Connected property</p></div>,
           dateOnly(tenant.lease_end) || '-',
           tenant.payment_status,
-          <div className="space-y-2">
-            {agreementLoading ? <div className="text-xs text-slate-500">Loading agreements...</div> : agreementPanel(tenant)}
-            {agreementNotice && <div className="text-xs text-emerald-700">{agreementNotice}</div>}
-            {agreementError && <div className="text-xs text-rose-600">{agreementError}</div>}
-          </div>,
-          tenantPortalPanel(tenant),
           <Actions onEdit={() => startEdit(tenant)} onDelete={() => remove(tenant)} />,
         ])}
       />
@@ -2260,7 +2353,7 @@ function LicenceManagement() {
 
 function AdminSafetyChecks() {
   const [checkingHealth, setCheckingHealth] = useState(false);
-  const webBuildVersion = 'v63';
+  const webBuildVersion = 'v65';
   const [healthStatus, setHealthStatus] = useState<'not_checked' | 'ok' | 'error'>('not_checked');
   const [healthMessage, setHealthMessage] = useState('Not checked in this browser session.');
   const [apiBuildVersion, setApiBuildVersion] = useState('not checked');
