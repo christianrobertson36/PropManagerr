@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { AlertTriangle, FileText, Home, Receipt, Wrench } from 'lucide-react';
 import { api } from '../api';
 import type { DashboardData, DocumentRecord, MaintenanceTicket, RentPayment, User } from '../types';
@@ -71,10 +72,57 @@ function SimpleTable<T>({
   );
 }
 
-export function TenantPortal({ data, user }: { data: DashboardData; user: User }) {
+export function TenantPortal({ data, user, refresh }: { data: DashboardData; user: User; refresh?: () => Promise<void> }) {
   const tenant = data.tenants.find(row => row.id === user.tenant_id) || null;
   const tenantPropertyId = tenant?.property_id || tenant?.property?.id || data.properties[0]?.id || '';
   const property = tenant?.property || data.properties.find(row => row.id === tenantPropertyId) || data.properties[0] || null;
+  const [uploadTitle, setUploadTitle] = useState('');
+  const [uploadType, setUploadType] = useState('tenant_upload');
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadSaving, setUploadSaving] = useState(false);
+  const [uploadNotice, setUploadNotice] = useState('');
+  const [uploadError, setUploadError] = useState('');
+
+  async function submitTenantUpload(event: React.FormEvent) {
+    event.preventDefault();
+    setUploadNotice('');
+    setUploadError('');
+
+    if (!tenant) {
+      setUploadError('No tenant record is linked to this login yet.');
+      return;
+    }
+
+    if (!uploadFile) {
+      setUploadError('Choose a file or photo first.');
+      return;
+    }
+
+    setUploadSaving(true);
+    try {
+      const uploaded = await api.uploadDocument(uploadFile);
+      const safeTitle = uploadTitle.trim() || uploaded.original_name || uploadFile.name || 'Tenant upload';
+
+      await api.createDocument({
+        tenant_id: tenant.id,
+        property_id: tenantPropertyId || property?.id || null,
+        name: safeTitle,
+        doc_type: uploadType || 'tenant_upload',
+        expiry_date: null,
+        file_url: uploaded.file_url,
+      });
+
+      setUploadTitle('');
+      setUploadType('tenant_upload');
+      setUploadFile(null);
+      setUploadNotice('Upload saved. Your landlord can now see this document.');
+      if (refresh) await refresh();
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : 'Upload failed. Please try again.');
+    } finally {
+      setUploadSaving(false);
+    }
+  }
 
   const rentPayments = data.rentPayments.filter(payment =>
     payment.tenant_id === user.tenant_id || Boolean(tenantPropertyId && payment.property_id === tenantPropertyId)
@@ -196,6 +244,68 @@ export function TenantPortal({ data, user }: { data: DashboardData; user: User }
           ]}
           rows={rentPayments}
         />
+      </TenantCard>
+
+      <TenantCard title="Upload a document">
+        <form onSubmit={submitTenantUpload} className="space-y-4">
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+            On mobile, tap Choose file to take a photo or pick a saved file. Use this for IDs, signed papers, photos, receipts or anything your landlord has asked for.
+          </div>
+
+          <label className="block text-sm font-medium text-slate-700">
+            What are you uploading?
+            <input
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-3 text-base focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              value={uploadTitle}
+              onChange={event => setUploadTitle(event.target.value)}
+              placeholder="Example: Signed agreement photo"
+            />
+          </label>
+
+          <label className="block text-sm font-medium text-slate-700">
+            Upload type
+            <select
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-3 text-base focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              value={uploadType}
+              onChange={event => setUploadType(event.target.value)}
+            >
+              <option value="tenant_upload">Tenant upload</option>
+              <option value="tenancy_agreement">Tenancy agreement</option>
+              <option value="id_document">ID document</option>
+              <option value="repair_photo">Repair photo</option>
+              <option value="receipt">Receipt</option>
+              <option value="other">Other</option>
+            </select>
+          </label>
+
+          <label className="block rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-700">
+            <span className="block font-semibold text-slate-900">Choose file or photo</span>
+            <span className="mt-1 block text-slate-600">PDF, image, Word document or text file. Photos from a phone camera are supported.</span>
+            <input
+              className="mt-3 block w-full text-base text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-emerald-600 file:px-4 file:py-3 file:text-sm file:font-semibold file:text-white"
+              type="file"
+              accept="image/*,.pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.txt"
+              onChange={event => setUploadFile(event.target.files?.[0] || null)}
+            />
+          </label>
+
+          {uploadFile && (
+            <div className="rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-700">
+              Selected: <span className="font-medium text-slate-900">{uploadFile.name}</span>
+            </div>
+          )}
+
+          {uploadNotice && <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{uploadNotice}</div>}
+          {uploadError && <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{uploadError}</div>}
+
+          <button
+            type="submit"
+            disabled={!uploadFile || uploadSaving}
+            className="w-full rounded-lg bg-emerald-600 px-4 py-4 text-base font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {uploadSaving ? 'Uploading...' : 'Upload document'}
+          </button>
+        </form>
       </TenantCard>
 
       <TenantCard title="My documents">

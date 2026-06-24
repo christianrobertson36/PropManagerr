@@ -1360,7 +1360,7 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
               </div>
               <Button variant="secondary" onClick={() => setPreviewTenant(null)}>Close preview</Button>
             </div>
-            <TenantPortal data={data} user={tenantPreviewUser} />
+            <TenantPortal data={data} user={tenantPreviewUser} refresh={refresh} />
           </div>
         </div>
       )}
@@ -2356,7 +2356,7 @@ function LicenceManagement() {
 
 function AdminSafetyChecks() {
   const [checkingHealth, setCheckingHealth] = useState(false);
-  const webBuildVersion = 'v66';
+  const webBuildVersion = 'v67';
   const [healthStatus, setHealthStatus] = useState<'not_checked' | 'ok' | 'error'>('not_checked');
   const [healthMessage, setHealthMessage] = useState('Not checked in this browser session.');
   const [apiBuildVersion, setApiBuildVersion] = useState('not checked');
@@ -2844,7 +2844,7 @@ export default function App() {
 
   let content: ReactNode;
   try {
-    if (user.role === 'tenant' && page === 'dashboard') content = <TenantPortal data={data} user={user} />;
+    if (user.role === 'tenant' && page === 'dashboard') content = <TenantPortal data={data} user={user} refresh={refresh} />;
     else if (page === 'dashboard') content = <Dashboard data={data} user={user} />;
     else if (page === 'properties') content = <Properties data={data} refresh={refresh} />;
     else if (page === 'tenants') content = <Tenants data={data} refresh={refresh} />;
