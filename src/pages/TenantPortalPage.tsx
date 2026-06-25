@@ -1,6 +1,7 @@
-import { useState } from 'react';
-import { AlertTriangle, FileText, Home, Menu, Receipt, Upload, Wrench, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { AlertTriangle, Bell, FileText, Home, Menu, Receipt, Trash2, Upload, Wrench, X } from 'lucide-react';
 import { api } from '../api';
+import type { NotificationRecord } from '../api';
 import type { DashboardData, DocumentRecord, MaintenanceTicket, RentPayment, User } from '../types';
 
 function dateOnly(value: string | null | undefined): string {
@@ -16,6 +17,7 @@ function money(value: number | string | null | undefined): string {
 
 function TenantCard({ title, children }: { title: string; children: React.ReactNode }) {
   const sectionIds: Record<string, string> = {
+    'Messages': 'messages',
     'My rent': 'rent',
     'Upload a document': 'upload',
     'My documents': 'documents',
@@ -116,6 +118,54 @@ export function TenantPortal({ data, user, refresh }: { data: DashboardData; use
   const [passwordNotice, setPasswordNotice] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [tenantNotifications, setTenantNotifications] = useState<NotificationRecord[]>([]);
+  const [notificationError, setNotificationError] = useState('');
+
+  async function loadTenantNotifications() {
+    setNotificationError('');
+    try {
+      const rows = await api.listNotifications();
+      setTenantNotifications(rows);
+    } catch (err) {
+      setNotificationError(err instanceof Error ? err.message : 'Could not load messages.');
+    }
+  }
+
+  useEffect(() => {
+    void loadTenantNotifications();
+  }, []);
+
+  const unreadTenantNotifications = tenantNotifications.filter(notification => !notification.read_at);
+
+  async function markTenantMessageRead(notification: NotificationRecord) {
+    try {
+      const updated = await api.markNotificationRead(notification.id);
+      setTenantNotifications(rows => rows.map(row => row.id === updated.id ? { ...row, read_at: updated.read_at } : row));
+    } catch (err) {
+      setNotificationError(err instanceof Error ? err.message : 'Could not mark message read.');
+    }
+  }
+
+  async function deleteTenantMessage(notification: NotificationRecord) {
+    const confirmed = window.confirm('Hide this message from your dashboard? The landlord will still keep an audit copy.');
+    if (!confirmed) return;
+
+    try {
+      await api.deleteNotification(notification.id);
+      setTenantNotifications(rows => rows.filter(row => row.id !== notification.id));
+    } catch (err) {
+      setNotificationError(err instanceof Error ? err.message : 'Could not delete message.');
+    }
+  }
+
+  async function markAllTenantMessagesRead() {
+    try {
+      await api.markAllNotificationsRead();
+      await loadTenantNotifications();
+    } catch (err) {
+      setNotificationError(err instanceof Error ? err.message : 'Could not mark messages read.');
+    }
+  }
 
   async function submitPasswordChange(event: React.FormEvent) {
     event.preventDefault();
@@ -243,6 +293,11 @@ export function TenantPortal({ data, user, refresh }: { data: DashboardData; use
         className="fixed right-3 top-3 z-50 inline-flex h-12 w-12 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-900 shadow-lg md:hidden"
         aria-label="Open tenant menu"
       >
+{unreadTenantNotifications.length > 0 && (
+          <span className="absolute -right-1 -top-1 inline-flex min-w-6 items-center justify-center rounded-full bg-rose-600 px-1.5 py-0.5 text-xs font-bold text-white">
+            {unreadTenantNotifications.length}
+          </span>
+        )}
         {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
       </button>
 
@@ -299,6 +354,69 @@ export function TenantPortal({ data, user, refresh }: { data: DashboardData; use
           </div>
         </div>
       </div>
+
+      <TenantCard title="Messages">
+        {notificationError && <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{notificationError}</div>}
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">
+              {unreadTenantNotifications.length > 0
+                ? unreadTenantNotifications.length + ' unread message' + (unreadTenantNotifications.length === 1 ? '' : 's')
+                : 'No unread messages'}
+            </p>
+            <p className="text-xs text-slate-500">Read messages can be hidden from your dashboard. The landlord keeps the audit log.</p>
+          </div>
+          <button
+            type="button"
+            disabled={!unreadTenantNotifications.length}
+            onClick={() => void markAllTenantMessagesRead()}
+            className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Mark all read
+          </button>
+        </div>
+
+        {tenantNotifications.length === 0 ? (
+          <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">No messages yet.</p>
+        ) : (
+          <div className="space-y-3">
+            {tenantNotifications.map(notification => (
+              <div key={notification.id} className={'rounded-xl border p-4 ' + (notification.read_at ? 'border-slate-200 bg-white' : 'border-emerald-200 bg-emerald-50')}>
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <div className="mb-2 flex flex-wrap gap-2">
+                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">{notification.type}</span>
+                      {!notification.read_at && <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-800">Unread</span>}
+                    </div>
+                    <p className="font-semibold text-slate-950">{notification.title}</p>
+                    <p className="mt-1 text-sm text-slate-700">{notification.body}</p>
+                    <p className="mt-2 text-xs text-slate-500">{new Date(notification.created_at).toLocaleString()}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {!notification.read_at && (
+                      <button
+                        type="button"
+                        onClick={() => void markTenantMessageRead(notification)}
+                        className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700"
+                      >
+                        Mark read
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => void deleteTenantMessage(notification)}
+                      className="inline-flex items-center gap-2 rounded-lg bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Hide
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </TenantCard>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <TenantCard title="My property">

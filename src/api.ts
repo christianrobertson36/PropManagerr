@@ -173,7 +173,21 @@ export type NotificationRecord = {
   link_page?: string | null;
   link_id?: string | null;
   read_at?: string | null;
+  deleted_at?: string | null;
+  saved_at?: string | null;
   created_at: string;
+};
+
+export type NotificationReadLog = {
+  id: string;
+  notification_id: string;
+  user_id?: string | null;
+  tenant_id?: string | null;
+  read_at?: string | null;
+  deleted_at?: string | null;
+  user_name?: string | null;
+  user_email?: string | null;
+  tenant_name?: string | null;
 };
 
 export type NotificationPayload = {
@@ -262,11 +276,26 @@ export const api = {
       method: 'PATCH',
     }),
 
+  deleteNotification: (id: string) =>
+    request<{ ok: boolean }>('/notifications/' + id + '/delete', {
+      method: 'PATCH',
+    }),
+
   createAdminNotification: (notification: NotificationPayload) =>
     request<NotificationRecord>('/admin/notifications', {
       method: 'POST',
       body: JSON.stringify(notification),
     }),
+
+  saveAdminNotification: (id: string, saved: boolean) =>
+    request<NotificationRecord>('/admin/notifications/' + id + '/save', {
+      method: 'PATCH',
+      body: JSON.stringify({ saved }),
+    }),
+
+  listNotificationReadLogs: (id: string) =>
+    request<NotificationReadLog[]>('/admin/notifications/' + id + '/read-logs'),
+
   complianceUpdates: () => request<ComplianceUpdate[]>('/compliance/updates'),
 
   createTicket: (

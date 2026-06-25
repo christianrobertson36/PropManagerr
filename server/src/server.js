@@ -504,6 +504,25 @@ async function ensureNotificationsTable() {
   await query('create index if not exists idx_notifications_audience on notifications(audience)');
   await query('create index if not exists idx_notifications_user_id on notifications(user_id)');
   await query('create index if not exists idx_notifications_tenant_id on notifications(tenant_id)');
+
+  await query('alter table notifications add column if not exists saved_at timestamptz');
+
+  await query(`
+    create table if not exists notification_reads (
+      id text primary key,
+      notification_id text not null references notifications(id) on delete cascade,
+      user_id text,
+      tenant_id text,
+      read_at timestamptz,
+      deleted_at timestamptz,
+      created_at timestamptz not null default now(),
+      unique(notification_id, user_id)
+    )
+  `);
+
+  await query('create index if not exists idx_notification_reads_notification_id on notification_reads(notification_id)');
+  await query('create index if not exists idx_notification_reads_user_id on notification_reads(user_id)');
+  await query('create index if not exists idx_notification_reads_tenant_id on notification_reads(tenant_id)');
 }
 
 ensureNotificationsTable().catch(error => {
@@ -548,7 +567,7 @@ async function createNotification({
   }
 }
 
-app.get('/health', (_req, res) => res.json({ ok: true, app: 'PropManagerr API', version: 'v91' }));
+app.get('/health', (_req, res) => res.json({ ok: true, app: 'PropManagerr API', version: 'v92' }));
 
 app.post('/auth/login', async (req, res) => {
   const { email, password } = req.body || {};
@@ -658,9 +677,11 @@ app.get('/notifications', requireAuth, async (req, res) => {
 
   if (currentUser.role === 'admin') {
     const { rows } = await query(
-      `select * from notifications
-       where audience in ('admin', 'all') or user_id=$1
-       order by created_at desc
+      `select n.*, nr.read_at, nr.deleted_at
+       from notifications n
+       left join notification_reads nr on nr.notification_id=n.id and nr.user_id=$1
+       where n.audience in ('admin', 'all') or n.user_id=$1
+       order by n.created_at desc
        limit 100`,
       [currentUser.id]
     );
@@ -668,11 +689,12 @@ app.get('/notifications', requireAuth, async (req, res) => {
   }
 
   const { rows } = await query(
-    `select * from notifications
-     where audience in ('tenant', 'all')
-       or user_id=$1
-       or tenant_id=$2
-     order by created_at desc
+    `select n.*, nr.read_at, nr.deleted_at
+     from notifications n
+     left join notification_reads nr on nr.notification_id=n.id and nr.user_id=$1
+     where (n.audience in ('tenant', 'all') or n.user_id=$1 or n.tenant_id=$2)
+       and nr.deleted_at is null
+     order by n.created_at desc
      limit 100`,
     [currentUser.id, currentUser.tenant_id || null]
   );
@@ -683,24 +705,22 @@ app.patch('/notifications/:id/read', requireAuth, async (req, res) => {
   await ensureNotificationsTable();
   const currentUser = await resolveTenantAccountLink(req.user);
 
-  if (currentUser.role === 'admin') {
-    const { rows } = await query(
-      `update notifications
-       set read_at=coalesce(read_at, now())
-       where id=$1 and (audience in ('admin', 'all') or user_id=$2)
-       returning *`,
-      [req.params.id, currentUser.id]
-    );
-    return sendOneOr404(res, rows, 'Notification');
-  }
+  await query(
+    `insert into notification_reads(id, notification_id, user_id, tenant_id, read_at)
+     values ($1,$2,$3,$4,now())
+     on conflict (notification_id, user_id)
+     do update set read_at=coalesce(notification_reads.read_at, now()), deleted_at=null`,
+    [crypto.randomUUID(), req.params.id, currentUser.id, currentUser.tenant_id || null]
+  );
 
   const { rows } = await query(
-    `update notifications
-     set read_at=coalesce(read_at, now())
-     where id=$1 and (audience in ('tenant', 'all') or user_id=$2 or tenant_id=$3)
-     returning *`,
-    [req.params.id, currentUser.id, currentUser.tenant_id || null]
+    `select n.*, nr.read_at, nr.deleted_at
+     from notifications n
+     left join notification_reads nr on nr.notification_id=n.id and nr.user_id=$2
+     where n.id=$1`,
+    [req.params.id, currentUser.id]
   );
+
   sendOneOr404(res, rows, 'Notification');
 });
 
@@ -708,22 +728,35 @@ app.patch('/notifications/read-all', requireAuth, async (req, res) => {
   await ensureNotificationsTable();
   const currentUser = await resolveTenantAccountLink(req.user);
 
-  if (currentUser.role === 'admin') {
+  const notificationRows = currentUser.role === 'admin'
+    ? await query(`select id from notifications where audience in ('admin', 'all') or user_id=$1`, [currentUser.id])
+    : await query(`select id from notifications where audience in ('tenant', 'all') or user_id=$1 or tenant_id=$2`, [currentUser.id, currentUser.tenant_id || null]);
+
+  for (const row of notificationRows.rows) {
     await query(
-      `update notifications
-       set read_at=coalesce(read_at, now())
-       where read_at is null and (audience in ('admin', 'all') or user_id=$1)`,
-      [currentUser.id]
+      `insert into notification_reads(id, notification_id, user_id, tenant_id, read_at)
+       values ($1,$2,$3,$4,now())
+       on conflict (notification_id, user_id)
+       do update set read_at=coalesce(notification_reads.read_at, now()), deleted_at=null`,
+      [crypto.randomUUID(), row.id, currentUser.id, currentUser.tenant_id || null]
     );
-    return res.json({ ok: true });
   }
 
+  res.json({ ok: true });
+});
+
+app.patch('/notifications/:id/delete', requireAuth, async (req, res) => {
+  await ensureNotificationsTable();
+  const currentUser = await resolveTenantAccountLink(req.user);
+
   await query(
-    `update notifications
-     set read_at=coalesce(read_at, now())
-     where read_at is null and (audience in ('tenant', 'all') or user_id=$1 or tenant_id=$2)`,
-    [currentUser.id, currentUser.tenant_id || null]
+    `insert into notification_reads(id, notification_id, user_id, tenant_id, read_at, deleted_at)
+     values ($1,$2,$3,$4,now(),now())
+     on conflict (notification_id, user_id)
+     do update set read_at=coalesce(notification_reads.read_at, now()), deleted_at=now()`,
+    [crypto.randomUUID(), req.params.id, currentUser.id, currentUser.tenant_id || null]
   );
+
   res.json({ ok: true });
 });
 
@@ -756,6 +789,34 @@ app.post('/admin/notifications', requireAuth, requireAdmin, async (req, res) => 
   });
 
   res.status(201).json(notification);
+});
+
+app.patch('/admin/notifications/:id/save', requireAuth, requireAdmin, async (req, res) => {
+  await ensureNotificationsTable();
+  const saved = Boolean(req.body?.saved);
+  const { rows } = await query(
+    'update notifications set saved_at=$2 where id=$1 returning *',
+    [req.params.id, saved ? new Date() : null]
+  );
+  sendOneOr404(res, rows, 'Notification');
+});
+
+app.get('/admin/notifications/:id/read-logs', requireAuth, requireAdmin, async (req, res) => {
+  await ensureNotificationsTable();
+  const { rows } = await query(
+    `select
+       nr.*,
+       u.name as user_name,
+       u.email as user_email,
+       t.name as tenant_name
+     from notification_reads nr
+     left join app_users u on u.id=nr.user_id
+     left join tenants t on t.id=nr.tenant_id
+     where nr.notification_id=$1
+     order by nr.read_at desc nulls last, nr.created_at desc`,
+    [req.params.id]
+  );
+  res.json(rows);
 });
 
 app.get('/admin/accounts', requireAuth, requireAdmin, async (_req, res) => {
