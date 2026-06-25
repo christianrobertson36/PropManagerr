@@ -469,7 +469,7 @@ async function recordLoginAudit(req, details) {
   }
 }
 
-app.get('/health', (_req, res) => res.json({ ok: true, app: 'PropManagerr API', version: 'v79' }));
+app.get('/health', (_req, res) => res.json({ ok: true, app: 'PropManagerr API', version: 'v80' }));
 
 app.post('/auth/login', async (req, res) => {
   const { email, password } = req.body || {};
@@ -1336,7 +1336,7 @@ app.post('/documents', requireAuth, async (req, res) => {
     if (!tenant) return res.status(403).json({ error: 'Tenant record could not be found.' });
 
     payload = {
-      property_id: tenant.property_id || null,
+      property_id: tenant.property_id || body.property_id || null,
       tenant_id: tenant.id,
       name: body.name ?? null,
       doc_type: body.doc_type || 'tenant_upload',
@@ -1357,7 +1357,7 @@ app.post('/documents', requireAuth, async (req, res) => {
   res.status(201).json(rows[0]);
   } catch (error) {
     console.error('document create failed', error);
-    res.status(500).json({ error: 'Document could not be saved' });
+    res.status(500).json({ error: 'Document could not be saved', detail: error?.message || String(error) });
   }
 });
 app.patch('/documents/:id', requireAuth, requireAdmin, async (req, res) => {
