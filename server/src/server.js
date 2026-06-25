@@ -183,6 +183,19 @@ app.post('/trash/restore', requireAuth, requireAdmin, async (req, res) => {
   sendOneOr404(res, rows, 'Deleted record');
 });
 
+app.delete('/trash/permanent', requireAuth, requireAdmin, async (req, res) => {
+  const table = String(req.body?.table || '').trim();
+  const id = String(req.body?.id || '').trim();
+  const confirmation = String(req.body?.confirmation || '').trim();
+
+  if (!softDeleteTables.has(table)) return res.status(400).json({ error: 'Unsupported permanent delete table' });
+  if (!id) return res.status(400).json({ error: 'Permanent delete id is required' });
+  if (confirmation !== 'DELETE') return res.status(400).json({ error: 'Type DELETE to permanently delete this record' });
+
+  const { rows } = await query(`delete from ${table} where id=$1 and deleted_at is not null returning *`, [id]);
+  sendOneOr404(res, rows, 'Deleted record');
+});
+
 
 
 function normaliseLicenseKey(value) {
@@ -469,7 +482,7 @@ async function recordLoginAudit(req, details) {
   }
 }
 
-app.get('/health', (_req, res) => res.json({ ok: true, app: 'PropManagerr API', version: 'v84' }));
+app.get('/health', (_req, res) => res.json({ ok: true, app: 'PropManagerr API', version: 'v85' }));
 
 app.post('/auth/login', async (req, res) => {
   const { email, password } = req.body || {};

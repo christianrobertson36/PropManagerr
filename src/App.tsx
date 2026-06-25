@@ -2619,6 +2619,7 @@ function TrashBin() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [restoringId, setRestoringId] = useState<string | null>(null);
+  const [permanentlyDeletingId, setPermanentlyDeletingId] = useState<string | null>(null);
 
   async function loadTrash() {
     setLoading(true);
@@ -2655,6 +2656,25 @@ function TrashBin() {
     }
   }
 
+  async function permanentlyDelete(record: DeletedRecord) {
+    const typed = window.prompt('This will permanently delete "' + record.name + '" from ' + friendlyTable(record.table) + '.\n\nThis cannot be undone. Type DELETE to confirm.');
+    if (typed !== 'DELETE') return;
+
+    const key = record.table + ':' + record.id;
+    setPermanentlyDeletingId(key);
+    setError('');
+
+    try {
+      await api.permanentlyDeleteTrashRecord(record.table, record.id, typed);
+      await loadTrash();
+      window.alert('Permanently deleted "' + record.name + '".');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not permanently delete record');
+    } finally {
+      setPermanentlyDeletingId(null);
+    }
+  }
+
   function friendlyTable(table: string) {
     return table.replace(/_/g, ' ');
   }
@@ -2664,7 +2684,7 @@ function TrashBin() {
       <div className="mb-4 flex flex-col justify-between gap-3 md:flex-row md:items-center">
         <div>
           <p className="text-sm text-slate-600">Restore deleted properties, tenants, rent payments, repairs, documents and expenses.</p>
-          <p className="mt-1 text-xs text-slate-500">Permanent delete is not enabled yet, so this stays safe while we test restore.</p>
+          <p className="mt-1 text-xs text-slate-500">Use Restore to recover items. Use Permanently delete only when you are sure the record is no longer needed.</p>
         </div>
         <Button variant="secondary" disabled={loading} onClick={() => void loadTrash()}>
           {loading ? 'Refreshing...' : 'Refresh trash'}
@@ -2695,9 +2715,16 @@ function TrashBin() {
                     <td className="px-3 py-2 font-medium text-slate-900">{record.name || record.id}</td>
                     <td className="px-3 py-2 text-slate-600">{dateOnly(record.deleted_at)}</td>
                     <td className="px-3 py-2">
-                      <Button variant="secondary" disabled={restoringId === key} onClick={() => void restore(record)}>
-                        {restoringId === key ? 'Restoring...' : 'Restore'}
-                      </Button>
+                      <div className="flex flex-wrap gap-2">
+                        <Button variant="secondary" disabled={restoringId === key || permanentlyDeletingId === key} onClick={() =>
+void restore(record)}>
+                          {restoringId === key ? 'Restoring...' : 'Restore'}
+                        </Button>
+                        <Button variant="danger" disabled={restoringId === key || permanentlyDeletingId === key} onClick={() =>
+void permanentlyDelete(record)}>
+                          {permanentlyDeletingId === key ? 'Deleting forever...' : 'Permanently delete'}
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 );

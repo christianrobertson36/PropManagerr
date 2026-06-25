@@ -328,6 +328,12 @@ export const api = {
       body: JSON.stringify({ table, id }),
     }),
 
+  permanentlyDeleteTrashRecord: (table: string, id: string, confirmation: string) =>
+    request('/trash/permanent', {
+      method: 'DELETE',
+      body: JSON.stringify({ table, id, confirmation }),
+    }),
+
   createProperty: (property: PropertyPayload) =>
     request('/properties', {
       method: 'POST',
