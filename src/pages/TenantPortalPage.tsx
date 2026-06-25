@@ -104,7 +104,7 @@ export function TenantPortal({ data, user, refresh }: { data: DashboardData; use
   const tenantPropertyId = tenant?.property_id || tenant?.property?.id || data.properties[0]?.id || '';
   const property = tenant?.property || data.properties.find(row => row.id === tenantPropertyId) || data.properties[0] || null;
   const [uploadTitle, setUploadTitle] = useState('');
-  const [uploadType, setUploadType] = useState('tenant_upload');
+  const [uploadType, setUploadType] = useState('other');
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadSaving, setUploadSaving] = useState(false);
   const [uploadNotice, setUploadNotice] = useState('');
