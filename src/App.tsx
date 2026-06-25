@@ -2020,6 +2020,126 @@ function Documents({ data, refresh, user }: { data: DashboardData; refresh: () =
       setDeletingDocumentId(null);
     }
   }
+  function documentTypeLabel(document: DocumentRecord) {
+    if (document.doc_type === 'tenancy_agreement') return 'Signed tenancy agreement';
+    return String(document.doc_type || 'other').replace(/_/g, ' ');
+  }
+
+  function documentGroup(document: DocumentRecord) {
+    if (document.doc_type === 'tenancy_agreement') return 'tenancy';
+    if (document.tenant_id) return 'tenant';
+    if (document.property_id || document.property?.id) return 'property';
+    return 'general';
+  }
+
+  function expiryTone(document: DocumentRecord) {
+    const days = daysUntil(document.expiry_date);
+    if (days === null) return { label: 'No expiry', className: 'border-slate-200 bg-slate-50 text-slate-600' };
+    if (days < 0) return { label: 'Expired ' + Math.abs(days) + 'd ago', className: 'border-rose-200 bg-rose-50 text-rose-700' };
+    if (days <= 30) return { label: 'Expires in ' + days + 'd', className: 'border-amber-200 bg-amber-50 text-amber-800' };
+    return { label: 'Expires ' + dateOnly(document.expiry_date), className: 'border-emerald-200 bg-emerald-50 text-emerald-700' };
+  }
+
+  function sortedDocuments(rows: DocumentRecord[]) {
+    return [...rows].sort((a, b) => {
+      const aExpiry = a.expiry_date ? new Date(a.expiry_date).getTime() : Number.MAX_SAFE_INTEGER;
+      const bExpiry = b.expiry_date ? new Date(b.expiry_date).getTime() : Number.MAX_SAFE_INTEGER;
+      return aExpiry - bExpiry || String(a.name).localeCompare(String(b.name));
+    });
+  }
+
+  const documentGroups = {
+    tenancy: sortedDocuments(visibleDocuments.filter(document => documentGroup(document) === 'tenancy')),
+    tenant: sortedDocuments(visibleDocuments.filter(document => documentGroup(document) === 'tenant')),
+    property: sortedDocuments(visibleDocuments.filter(document => documentGroup(document) === 'property')),
+    general: sortedDocuments(visibleDocuments.filter(document => documentGroup(document) === 'general')),
+  };
+
+  const expiringSoonCount = visibleDocuments.filter(document => {
+    const days = daysUntil(document.expiry_date);
+    return days !== null && days >= 0 && days <= 60;
+  }).length;
+
+  const expiredCount = visibleDocuments.filter(document => {
+    const days = daysUntil(document.expiry_date);
+    return days !== null && days < 0;
+  }).length;
+
+  function DocumentCard({ document }: { document: DocumentRecord }) {
+    const group = documentGroup(document);
+    const expiry = expiryTone(document);
+    const propertyLabel = document.property?.address || propertyAddress(document.property_id);
+    const tenantLabel = document.tenant?.name || tenantName(document.tenant_id);
+    const isTenantDocument = group === 'tenant' || group === 'tenancy';
+    const isPropertyDocument = group === 'property';
+
+    const accent =
+      group === 'tenancy'
+        ? 'border-emerald-200 bg-emerald-50/60'
+        : group === 'tenant'
+          ? 'border-violet-200 bg-violet-50/60'
+          : group === 'property'
+            ? 'border-sky-200 bg-sky-50/60'
+            : 'border-slate-200 bg-white';
+
+    const badge =
+      group === 'tenancy'
+        ? 'bg-emerald-100 text-emerald-800'
+        : group === 'tenant'
+          ? 'bg-violet-100 text-violet-800'
+          : group === 'property'
+            ? 'bg-sky-100 text-sky-800'
+            : 'bg-slate-100 text-slate-700';
+
+    return (
+      <div className={'rounded-xl border p-4 shadow-sm ' + accent}>
+        <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
+          <div className="min-w-0">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <span className={'rounded-full px-2.5 py-1 text-xs font-semibold capitalize ' + badge}>{documentTypeLabel(document)}</span>
+              <span className={'rounded-full border px-2.5 py-1 text-xs font-medium ' + expiry.className}>{expiry.label}</span>
+            </div>
+            <h3 className="text-base font-semibold text-slate-950">{document.name}</h3>
+            <div className="mt-3 grid gap-2 text-sm text-slate-700 md:grid-cols-2">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Property file</p>
+                <p className="font-medium text-slate-900">{propertyLabel}</p>
+                <p className="text-xs text-slate-500">{isPropertyDocument ? 'Permanent property record' : isTenantDocument ? 'Linked at upload/current tenant property' : 'General document'}</p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tenant scope</p>
+                <p className="font-medium text-slate-900">{tenantLabel}</p>
+                <p className="text-xs text-slate-500">{isTenantDocument ? 'Person/tenancy-specific' : 'Visible to all relevant tenants'}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex shrink-0 flex-wrap gap-2">
+            {document.file_url ? (
+              <a className="inline-flex min-h-10 items-center rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100" href={api.documentFileUrl(document.file_url)} target="_blank" rel="noreferrer">
+                {document.doc_type === 'tenancy_agreement' ? 'Open signed agreement' : 'View file'}
+              </a>
+            ) : (
+              <span className="inline-flex min-h-10 items-center rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">No file uploaded</span>
+            )}
+            {user.role === 'admin' && <Button variant="secondary" onClick={() => startEdit(document)}>Edit</Button>}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function DocumentSection({ title, helper, rows }: { title: string; helper: string; rows: DocumentRecord[] }) {
+    if (rows.length === 0) return null;
+    return (
+      <Card title={title + ' (' + rows.length + ')'}>
+        <p className="mb-4 text-sm text-slate-600">{helper}</p>
+        <div className="space-y-3">
+          {rows.map(document => <DocumentCard key={document.id} document={document} />)}
+        </div>
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -2033,13 +2153,13 @@ function Documents({ data, refresh, user }: { data: DashboardData; refresh: () =
         <CrudLayout title={editing ? 'Edit document' : 'Add document'} onSubmit={submit} onCancel={reset} editing={Boolean(editing)} hideTable>
           <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800 md:col-span-3">
             <p className="font-semibold text-blue-950">Attach this document to the right place</p>
-            <p className="mt-1">Use Property for gas safety, EPC, EICR and house documents. Use Tenant for tenancy agreements, ID checks, deposit protection and tenant-specific files.</p>
+            <p className="mt-1">Use Property for permanent house records like EPC, gas safety and EICR. Use Tenant for person or tenancy records like agreements, ID/right-to-rent and deposit paperwork. Tenants can change, but the property file stays stable.</p>
           </div>
 
           <Select<'all' | 'property' | 'tenant'> label="Attach document to" value={documentAudience} onChange={setAudience}>
             <option value="all">General - visible to all tenants</option>
-            <option value="property">Property - linked to one property</option>
-            <option value="tenant">Tenant - linked to one tenant and their property</option>
+            <option value="property">Property - permanent property record</option>
+            <option value="tenant">Tenant - person/tenancy record</option>
           </Select>
 
           {documentAudience === 'tenant' && (
@@ -2114,38 +2234,39 @@ function Documents({ data, refresh, user }: { data: DashboardData; refresh: () =
         </CrudLayout>
       )}
 
-      <Table
-        columns={['Name', 'Type', 'Property', 'Tenant', 'Expiry', 'File', 'Actions']}
-        rows={visibleDocuments.map(document => [
-          document.name,
-          document.doc_type === 'tenancy_agreement' ? (
-            <span className="inline-flex rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">Signed tenancy agreement</span>
-          ) : document.doc_type,
-          <div className="text-sm">
-            <p className="font-medium text-slate-800">{document.property?.address || propertyAddress(document.property_id)}</p>
-            <p className="text-xs text-slate-500">{document.tenant_id ? 'Auto-linked from tenant' : document.property_id ? 'Property document' : 'General document'}</p>
-          </div>,
-          <div className="text-sm">
-            <p className="font-medium text-slate-800">{document.tenant?.name || tenantName(document.tenant_id)}</p>
-            <p className="text-xs text-slate-500">{document.doc_type === 'tenancy_agreement' ? 'Tenancy agreement owner' : document.tenant_id ? 'Tenant-specific document' : 'Not tenant-specific'}</p>
-          </div>,
-          dateOnly(document.expiry_date) || '-',
-          document.file_url ? (
-            <a key={`${document.id}-file`} className="inline-flex min-h-10 items-center rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100" href={api.documentFileUrl(document.file_url)} target="_blank" rel="noreferrer">
-              {document.doc_type === 'tenancy_agreement' ? 'Open signed agreement' : 'View file'}
-            </a>
-          ) : (
-            <span className="inline-flex min-h-10 items-center rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">No file uploaded</span>
-          ),
-          user.role === 'admin' ? (
-            <div className="flex gap-2">
-              <Button variant="secondary" onClick={() => startEdit(document)}>Edit</Button>
-              
-            </div>
-          ) : '-',
-        ])}
-      />
-    </div>
+      <div className="grid gap-4 md:grid-cols-4" aria-label="Document library summary">
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Total documents</p>
+          <p className="mt-2 text-2xl font-bold text-slate-950">{visibleDocuments.length}</p>
+        </div>
+        <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-sky-700">Property records</p>
+          <p className="mt-2 text-2xl font-bold text-sky-950">{documentGroups.property.length}</p>
+        </div>
+        <div className="rounded-xl border border-violet-200 bg-violet-50 p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">Tenant records</p>
+          <p className="mt-2 text-2xl font-bold text-violet-950">{documentGroups.tenant.length + documentGroups.tenancy.length}</p>
+        </div>
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Needs attention</p>
+          <p className="mt-2 text-2xl font-bold text-amber-950">{expiredCount + expiringSoonCount}</p>
+          <p className="text-xs text-amber-700">{expiredCount} expired · {expiringSoonCount} expiring soon</p>
+        </div>
+      </div>
+
+      {visibleDocuments.length === 0 ? (
+        <Card title="Document library">
+          <p className="text-sm text-slate-600">No documents found.</p>
+        </Card>
+      ) : (
+        <div className="space-y-6">
+          <DocumentSection title="Tenancy agreements" helper="Signed agreements and tenancy paperwork linked to a specific tenant." rows={documentGroups.tenancy} />
+          <DocumentSection title="Tenant documents" helper="Person or tenancy-specific files. These are useful when tenants change or move." rows={documentGroups.tenant} />
+          <DocumentSection title="Property documents" helper="Permanent property file: EPC, gas safety, EICR and house-level compliance documents." rows={documentGroups.property} />
+          <DocumentSection title="General documents" helper="Shared guidance, policies and files visible to all relevant tenants." rows={documentGroups.general} />
+        </div>
+      )}
+</div>
   );
 }
 
