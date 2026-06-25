@@ -567,7 +567,7 @@ async function createNotification({
   }
 }
 
-app.get('/health', (_req, res) => res.json({ ok: true, app: 'PropManagerr API', version: 'v92' }));
+app.get('/health', (_req, res) => res.json({ ok: true, app: 'PropManagerr API', version: 'v93' }));
 
 app.post('/auth/login', async (req, res) => {
   const { email, password } = req.body || {};
@@ -803,20 +803,39 @@ app.patch('/admin/notifications/:id/save', requireAuth, requireAdmin, async (req
 
 app.get('/admin/notifications/:id/read-logs', requireAuth, requireAdmin, async (req, res) => {
   await ensureNotificationsTable();
-  const { rows } = await query(
-    `select
-       nr.*,
-       u.name as user_name,
-       u.email as user_email,
-       t.name as tenant_name
-     from notification_reads nr
-     left join app_users u on u.id=nr.user_id
-     left join tenants t on t.id=nr.tenant_id
-     where nr.notification_id=$1
-     order by nr.read_at desc nulls last, nr.created_at desc`,
-    [req.params.id]
-  );
-  res.json(rows);
+
+  try {
+    const { rows } = await query(
+      `select
+         nr.id,
+         nr.notification_id,
+         nr.user_id,
+         nr.tenant_id,
+         nr.read_at,
+         nr.deleted_at,
+         nr.created_at,
+         u.name as user_name,
+         u.email as user_email,
+         t.name as tenant_name
+       from notification_reads nr
+       left join app_users u on u.id::text=nr.user_id::text
+       left join tenants t on t.id::text=nr.tenant_id::text
+       where nr.notification_id=$1
+       order by nr.read_at desc nulls last, nr.created_at desc`,
+      [req.params.id]
+    );
+
+    res.json(rows);
+  } catch (error) {
+    console.error('Notification read log lookup failed', error);
+    res.status(500).json({ error: 'Could not load notification read logs' });
+  }
+});
+
+app.delete('/admin/notifications/:id', requireAuth, requireAdmin, async (req, res) => {
+  await ensureNotificationsTable();
+  const { rows } = await query('delete from notifications where id=$1 returning *', [req.params.id]);
+  sendOneOr404(res, rows, 'Notification');
 });
 
 app.get('/admin/accounts', requireAuth, requireAdmin, async (_req, res) => {

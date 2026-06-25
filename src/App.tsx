@@ -2986,6 +2986,23 @@ function NotificationCentre() {
     }
   }
 
+  async function deleteAdminNotification(notification: NotificationRecord) {
+    const confirmed = window.confirm('Delete this admin notification permanently? Tenant read/hide logs linked to this message will also be removed.');
+    if (!confirmed) return;
+
+    try {
+      await api.deleteAdminNotification(notification.id);
+      setNotifications(rows => rows.filter(row => row.id !== notification.id));
+      setReadLogsByNotification(current => {
+        const next = { ...current };
+        delete next[notification.id];
+        return next;
+      });
+    } catch (err) {
+      setNotificationError(err instanceof Error ? err.message : 'Could not delete notification');
+    }
+  }
+
   async function sendBroadcast(event: FormEvent) {
     event.preventDefault();
     setNotificationError('');
@@ -3060,8 +3077,13 @@ function NotificationCentre() {
           <div className="space-y-3">
             {notifications.filter(notification => notification.saved_at).map(notification => (
               <div key={notification.id} className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-                <p className="font-semibold text-amber-950">{notification.title}</p>
-                <p className="mt-1 text-sm text-amber-800">{notification.body}</p>
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <p className="font-semibold text-amber-950">{notification.title}</p>
+                    <p className="mt-1 text-sm text-amber-800">{notification.body}</p>
+                  </div>
+                  <Button variant="secondary" onClick={() => void deleteAdminNotification(notification)}>Delete saved admin notification</Button>
+                </div>
               </div>
             ))}
           </div>
@@ -3100,6 +3122,7 @@ function NotificationCentre() {
                     {notification.link_page && <span className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">Page: {notification.link_page}</span>}
                     <Button variant="secondary" onClick={() => void toggleSavedNotification(notification)}>{notification.saved_at ? 'Unsave' : 'Save'}</Button>
                     <Button variant="secondary" onClick={() => void loadReadLogs(notification)}>Read logs</Button>
+                    <Button variant="secondary" onClick={() => void deleteAdminNotification(notification)}>Delete admin message</Button>
                     {!notification.read_at && <Button variant="secondary" onClick={() => void markRead(notification)}>Mark read</Button>}
                   </div>
                 </div>

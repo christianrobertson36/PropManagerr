@@ -296,6 +296,11 @@ export const api = {
   listNotificationReadLogs: (id: string) =>
     request<NotificationReadLog[]>('/admin/notifications/' + id + '/read-logs'),
 
+  deleteAdminNotification: (id: string) =>
+    request<NotificationRecord>('/admin/notifications/' + id, {
+      method: 'DELETE',
+    }),
+
   complianceUpdates: () => request<ComplianceUpdate[]>('/compliance/updates'),
 
   createTicket: (
