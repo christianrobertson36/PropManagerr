@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AlertTriangle, FileText, Home, Receipt, Upload, Wrench } from 'lucide-react';
+import { AlertTriangle, FileText, Home, Menu, Receipt, Upload, Wrench, X } from 'lucide-react';
 import { api } from '../api';
 import type { DashboardData, DocumentRecord, MaintenanceTicket, RentPayment, User } from '../types';
 
@@ -24,7 +24,7 @@ function TenantCard({ title, children }: { title: string; children: React.ReactN
   const sectionId = sectionIds[title];
 
   return (
-    <section id={sectionId} className="scroll-mt-20 max-w-full overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+    <section id={sectionId} className="scroll-mt-24 max-w-full overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
       <h2 className="mb-4 text-lg font-semibold text-slate-900">{title}</h2>
       {children}
     </section>
@@ -235,9 +235,41 @@ export function TenantPortal({ data, user, refresh }: { data: DashboardData; use
     .slice(0, 3);
 
   return (
-    <div className="max-w-full overflow-x-hidden pb-24">
+    <div className="relative max-w-full overflow-x-hidden">
+      <button
+        type="button"
+        onClick={() => setMobileMenuOpen(value => !value)}
+        className="fixed right-3 top-3 z-50 inline-flex h-12 w-12 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-900 shadow-lg md:hidden"
+        aria-label="Open tenant menu"
+      >
+        {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+      </button>
+
+      {mobileMenuOpen && (
+        <div className="fixed inset-x-3 top-16 z-50 rounded-2xl border border-slate-200 bg-white p-3 shadow-xl md:hidden">
+          <div className="grid grid-cols-2 gap-2 text-sm font-semibold text-slate-800">
+            <a onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-3 hover:bg-slate-100" href="#rent">
+              <Receipt className="h-5 w-5" />
+              Rent
+            </a>
+            <a onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-3 hover:bg-slate-100" href="#upload">
+              <Upload className="h-5 w-5" />
+              Upload
+            </a>
+            <a onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-3 hover:bg-slate-100" href="#documents">
+              <FileText className="h-5 w-5" />
+              Docs
+            </a>
+            <a onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-3 hover:bg-slate-100" href="#repairs">
+              <Wrench className="h-5 w-5" />
+              Repairs
+            </a>
+          </div>
+        </div>
+      )}
+
       <div className="space-y-6">
-      <div className="rounded-2xl bg-slate-900 p-6 text-white shadow-sm">
+      <div className="max-w-full overflow-hidden rounded-2xl bg-slate-900 p-5 text-white shadow-sm sm:p-6">
         <p className="text-sm text-emerald-200">Tenant portal</p>
         <h1 className="mt-1 text-2xl font-bold">Welcome, {user.name}</h1>
         <p className="mt-2 text-sm text-slate-300">Your property, rent, tenancy documents and repair updates in one simple place.</p>
@@ -478,27 +510,6 @@ export function TenantPortal({ data, user, refresh }: { data: DashboardData; use
         />
       </TenantCard>
       </div>
-
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-3 py-2 shadow-lg backdrop-blur md:hidden">
-        <div className="grid grid-cols-4 gap-2 text-xs font-semibold text-slate-700">
-          <a className="flex flex-col items-center justify-center rounded-xl px-2 py-2 hover:bg-slate-100" href="#rent">
-            <Receipt className="mb-1 h-5 w-5" />
-            Rent
-          </a>
-          <a className="flex flex-col items-center justify-center rounded-xl px-2 py-2 hover:bg-slate-100" href="#upload">
-            <Upload className="mb-1 h-5 w-5" />
-            Upload
-          </a>
-          <a className="flex flex-col items-center justify-center rounded-xl px-2 py-2 hover:bg-slate-100" href="#documents">
-            <FileText className="mb-1 h-5 w-5" />
-            Docs
-          </a>
-          <a className="flex flex-col items-center justify-center rounded-xl px-2 py-2 hover:bg-slate-100" href="#repairs">
-            <Wrench className="mb-1 h-5 w-5" />
-            Repairs
-          </a>
-        </div>
-      </nav>
-    </div>
+</div>
   );
 }
