@@ -246,6 +246,8 @@ function Login({ onLogin }: { onLogin: (user: User) => void }) {
 function Dashboard({ data }: { data: DashboardData; user: User }) {
   const [updates, setUpdates] = useState<ComplianceUpdate[]>([]);
   const [updatesError, setUpdatesError] = useState('');
+  const [dashboardNotifications, setDashboardNotifications] = useState<NotificationRecord[]>([]);
+  const [notificationsError, setNotificationsError] = useState('');
 
   const paidPayments = data.rentPayments.filter(payment => payment.status === 'paid');
   const outstandingPayments = data.rentPayments.filter(payment => payment.status !== 'paid');
@@ -297,6 +299,44 @@ function Dashboard({ data }: { data: DashboardData; user: User }) {
     return 'bg-slate-100 text-slate-700';
   }
 
+  useEffect(() => {
+    let cancelled = false;
+
+    api.listNotifications()
+      .then(rows => {
+        if (!cancelled) setDashboardNotifications(rows);
+      })
+      .catch(err => {
+        if (!cancelled) setNotificationsError(err instanceof Error ? err.message : 'Could not load notifications');
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const unreadDashboardNotifications = dashboardNotifications.filter(notification => !notification.read_at);
+  const recentDashboardNotifications = dashboardNotifications.slice(0, 5);
+
+  async function markDashboardNotificationRead(notification: NotificationRecord) {
+    try {
+      const updated = await api.markNotificationRead(notification.id);
+      setDashboardNotifications(rows => rows.map(row => row.id === updated.id ? updated : row));
+    } catch (err) {
+      setNotificationsError(err instanceof Error ? err.message : 'Could not mark notification read');
+    }
+  }
+
+  async function markAllDashboardNotificationsRead() {
+    try {
+      await api.markAllNotificationsRead();
+      const rows = await api.listNotifications();
+      setDashboardNotifications(rows);
+    } catch (err) {
+      setNotificationsError(err instanceof Error ? err.message : 'Could not mark notifications read');
+    }
+  }
+
   return (
     <div className="space-y-6">
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 p-6 text-white shadow-sm">
@@ -324,6 +364,55 @@ function Dashboard({ data }: { data: DashboardData; user: User }) {
           </div>
         </div>
       </section>
+
+      <Card title="Dashboard messages">
+        {notificationsError && (
+          <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+            {notificationsError}
+          </div>
+        )}
+
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm text-slate-600">
+              {unreadDashboardNotifications.length > 0
+                ? unreadDashboardNotifications.length + ' unread message' + (unreadDashboardNotifications.length === 1 ? '' : 's')
+                : 'No unread messages'}
+            </p>
+            <p className="text-xs text-slate-500">Admin messages and alerts will show here for tenant/test accounts.</p>
+          </div>
+          <Button variant="secondary" disabled={!unreadDashboardNotifications.length} onClick={() => void markAllDashboardNotificationsRead()}>
+            Mark all read
+          </Button>
+        </div>
+
+        {recentDashboardNotifications.length === 0 ? (
+          <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">No messages yet.</p>
+        ) : (
+          <div className="space-y-3">
+            {recentDashboardNotifications.map(notification => (
+              <div key={notification.id} className={'rounded-xl border p-4 ' + (notification.read_at ? 'border-slate-200 bg-white' : 'border-emerald-200 bg-emerald-50')}>
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <div className="mb-2 flex flex-wrap gap-2">
+                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">{notification.type}</span>
+                      {!notification.read_at && <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-800">Unread</span>}
+                    </div>
+                    <p className="font-semibold text-slate-950">{notification.title}</p>
+                    <p className="mt-1 text-sm text-slate-700">{notification.body}</p>
+                    <p className="mt-2 text-xs text-slate-500">{new Date(notification.created_at).toLocaleString()}</p>
+                  </div>
+                  {!notification.read_at && (
+                    <Button variant="secondary" onClick={() => void markDashboardNotificationRead(notification)}>
+                      Mark read
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Stat label="Monthly rent roll" value={money(totalMonthlyRent)} icon={Building2} />

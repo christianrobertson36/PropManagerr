@@ -548,7 +548,7 @@ async function createNotification({
   }
 }
 
-app.get('/health', (_req, res) => res.json({ ok: true, app: 'PropManagerr API', version: 'v90' }));
+app.get('/health', (_req, res) => res.json({ ok: true, app: 'PropManagerr API', version: 'v91' }));
 
 app.post('/auth/login', async (req, res) => {
   const { email, password } = req.body || {};
