@@ -2104,9 +2104,7 @@ function Documents({ data, refresh, user }: { data: DashboardData; refresh: () =
           user.role === 'admin' ? (
             <div className="flex gap-2">
               <Button variant="secondary" onClick={() => startEdit(document)}>Edit</Button>
-              <Button variant="danger" disabled={deletingDocumentId === document.id} onClick={() => remove(document)}>
-                {deletingDocumentId === document.id ? 'Deleting...' : 'Delete'}
-              </Button>
+              
             </div>
           ) : '-',
         ])}
@@ -2865,11 +2863,10 @@ function CrudLayout({
   );
 }
 
-function Actions({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => void }) {
+function Actions({ onEdit }: { onEdit: () => void; onDelete?: () => void }) {
   return (
     <div className="flex gap-2">
       <Button variant="secondary" onClick={onEdit}>Edit</Button>
-      <Button variant="danger" onClick={onDelete}>Delete</Button>
     </div>
   );
 }
