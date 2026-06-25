@@ -44,31 +44,50 @@ function SimpleTable<T>({
   rows: T[];
   empty: string;
 }) {
-  return rows.length === 0 ? (
-    <p className="text-sm text-slate-600">{empty}</p>
-  ) : (
-    <div className="overflow-x-auto">
-      <table className="min-w-full divide-y divide-slate-200 text-sm">
-        <thead>
-          <tr>
-            {columns.map(column => (
-              <th key={String(column.key)} className="px-3 py-2 text-left font-semibold text-slate-700">{column.label}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100">
-          {rows.map((row, index) => (
-            <tr key={index}>
+  if (rows.length === 0) {
+    return <p className="text-sm text-slate-600">{empty}</p>;
+  }
+
+  return (
+    <>
+      <div className="hidden overflow-x-auto md:block">
+        <table className="min-w-full divide-y divide-slate-200 text-sm">
+          <thead>
+            <tr>
               {columns.map(column => (
-                <td key={String(column.key)} className="px-3 py-2 align-top text-slate-700">
-                  {column.render ? column.render(row) : String((row as Record<string, unknown>)[String(column.key)] ?? '-')}
-                </td>
+                <th key={String(column.key)} className="px-3 py-2 text-left font-semibold text-slate-700">{column.label}</th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {rows.map((row, index) => (
+              <tr key={index}>
+                {columns.map(column => (
+                  <td key={String(column.key)} className="px-3 py-2 align-top text-slate-700">
+                    {column.render ? column.render(row) : String((row as Record<string, unknown>)[String(column.key)] ?? '-')}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="space-y-3 md:hidden">
+        {rows.map((row, index) => (
+          <div key={index} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            {columns.map(column => (
+              <div key={String(column.key)} className="border-b border-slate-100 py-2 last:border-b-0">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{column.label}</p>
+                <div className="mt-1 break-words text-sm text-slate-800">
+                  {column.render ? column.render(row) : String((row as Record<string, unknown>)[String(column.key)] ?? '-')}
+                </div>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </>
   );
 }
 
@@ -423,7 +442,7 @@ export function TenantPortal({ data, user, refresh }: { data: DashboardData; use
               key: 'file_url',
               label: 'File',
               render: row => row.file_url ? (
-                <a className="font-medium text-emerald-700 hover:underline" href={api.documentFileUrl(row.file_url)} target="_blank" rel="noreferrer">View</a>
+                <a className="inline-flex w-full justify-center rounded-lg bg-emerald-600 px-4 py-3 text-sm font-semibold text-white hover:bg-emerald-700 md:w-auto md:bg-transparent md:px-0 md:py-0 md:text-emerald-700 md:hover:bg-transparent md:hover:underline" href={api.documentFileUrl(row.file_url)} target="_blank" rel="noreferrer">View</a>
               ) : 'Not uploaded',
             },
           ]}

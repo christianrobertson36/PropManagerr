@@ -469,7 +469,7 @@ async function recordLoginAudit(req, details) {
   }
 }
 
-app.get('/health', (_req, res) => res.json({ ok: true, app: 'PropManagerr API', version: 'v74' }));
+app.get('/health', (_req, res) => res.json({ ok: true, app: 'PropManagerr API', version: 'v75' }));
 
 app.post('/auth/login', async (req, res) => {
   const { email, password } = req.body || {};
@@ -1317,8 +1317,35 @@ app.get('/documents', requireAuth, requireAdmin, async (_req, res) => {
   res.json(rows);
 });
 
-app.post('/documents', requireAuth, requireAdmin, async (req, res) => {
-  const payload = await normaliseDocumentPayload(req.body || {});
+app.post('/documents', requireAuth, async (req, res) => {
+  const currentUser = await resolveTenantAccountLink(req.user);
+  const body = req.body || {};
+  let payload;
+
+  if (currentUser.role === 'tenant') {
+    if (!currentUser.tenant_id) {
+      return res.status(403).json({ error: 'No tenant record is linked to this login yet.' });
+    }
+
+    const { rows: tenantRows } = await query(
+      'select id, property_id from tenants where id=$1 and deleted_at is null',
+      [currentUser.tenant_id]
+    );
+    const tenant = tenantRows[0];
+    if (!tenant) return res.status(403).json({ error: 'Tenant record could not be found.' });
+
+    payload = {
+      property_id: tenant.property_id || null,
+      tenant_id: tenant.id,
+      name: body.name ?? null,
+      doc_type: body.doc_type || 'tenant_upload',
+      expiry_date: null,
+      file_url: body.file_url || null,
+    };
+  } else {
+    payload = await normaliseDocumentPayload(body);
+  }
+
   if (!payload.name) return res.status(400).json({ error: 'Document name is required' });
 
   const { rows } = await query(
@@ -1328,7 +1355,6 @@ app.post('/documents', requireAuth, requireAdmin, async (req, res) => {
   );
   res.status(201).json(rows[0]);
 });
-
 app.patch('/documents/:id', requireAuth, requireAdmin, async (req, res) => {
   const payload = await normaliseDocumentPayload(req.body || {});
   const fields = ['property_id', 'tenant_id', 'name', 'doc_type', 'expiry_date', 'file_url'];
@@ -1351,7 +1377,7 @@ app.delete('/documents/:id', requireAuth, requireAdmin, async (req, res) => {
   return res.json(deleted);
 });
 
-app.post('/documents/upload', requireAuth, requireAdmin, uploadDocumentFile, (req, res) => {
+app.post('/documents/upload', requireAuth, uploadDocumentFile, (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
   res.json({ file_url: `/uploads/documents/${req.file.filename}`, original_name: req.file.originalname });
 });
@@ -1429,6 +1455,3 @@ const port = Number(process.env.PORT || 3000);
 await initDatabase();
 await applyRuntimeMigrations();
 app.listen(port, () => console.log(`PropManager API listening on ${port}`));
-
-
-
