@@ -2075,6 +2075,24 @@ function Documents({ data, refresh, user }: { data: DashboardData; refresh: () =
             Upload file
             <input className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" type="file" onChange={event => setFile(event.target.files?.[0] || null)} />
           </label>
+        {editing && (
+
+          <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700 md:col-span-3">
+
+            <p className="font-semibold text-rose-900">Danger zone</p>
+
+            <p className="mt-1">Delete this document from inside the edit panel only.</p>
+
+            <Button type="button" variant="danger" disabled={deletingDocumentId === editing.id} onClick={() => void remove(editing)}>
+
+              {deletingDocumentId === editing.id ? 'Deleting...' : 'Delete document'}
+
+            </Button>
+
+          </div>
+
+        )}
+
         </CrudLayout>
       )}
 
