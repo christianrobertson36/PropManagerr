@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AlertTriangle, FileText, Home, Receipt, Wrench } from 'lucide-react';
+import { AlertTriangle, FileText, Home, Receipt, Upload, Wrench } from 'lucide-react';
 import { api } from '../api';
 import type { DashboardData, DocumentRecord, MaintenanceTicket, RentPayment, User } from '../types';
 
@@ -15,8 +15,16 @@ function money(value: number | string | null | undefined): string {
 }
 
 function TenantCard({ title, children }: { title: string; children: React.ReactNode }) {
+  const sectionIds: Record<string, string> = {
+    'My rent': 'rent',
+    'Upload a document': 'upload',
+    'My documents': 'documents',
+    'My repairs': 'repairs',
+  };
+  const sectionId = sectionIds[title];
+
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+    <section id={sectionId} className="scroll-mt-20 max-w-full overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <h2 className="mb-4 text-lg font-semibold text-slate-900">{title}</h2>
       {children}
     </section>
@@ -227,7 +235,8 @@ export function TenantPortal({ data, user, refresh }: { data: DashboardData; use
     .slice(0, 3);
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-full overflow-x-hidden pb-24">
+      <div className="space-y-6">
       <div className="rounded-2xl bg-slate-900 p-6 text-white shadow-sm">
         <p className="text-sm text-emerald-200">Tenant portal</p>
         <h1 className="mt-1 text-2xl font-bold">Welcome, {user.name}</h1>
@@ -468,6 +477,28 @@ export function TenantPortal({ data, user, refresh }: { data: DashboardData; use
           rows={repairs}
         />
       </TenantCard>
+      </div>
+
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-3 py-2 shadow-lg backdrop-blur md:hidden">
+        <div className="grid grid-cols-4 gap-2 text-xs font-semibold text-slate-700">
+          <a className="flex flex-col items-center justify-center rounded-xl px-2 py-2 hover:bg-slate-100" href="#rent">
+            <Receipt className="mb-1 h-5 w-5" />
+            Rent
+          </a>
+          <a className="flex flex-col items-center justify-center rounded-xl px-2 py-2 hover:bg-slate-100" href="#upload">
+            <Upload className="mb-1 h-5 w-5" />
+            Upload
+          </a>
+          <a className="flex flex-col items-center justify-center rounded-xl px-2 py-2 hover:bg-slate-100" href="#documents">
+            <FileText className="mb-1 h-5 w-5" />
+            Docs
+          </a>
+          <a className="flex flex-col items-center justify-center rounded-xl px-2 py-2 hover:bg-slate-100" href="#repairs">
+            <Wrench className="mb-1 h-5 w-5" />
+            Repairs
+          </a>
+        </div>
+      </nav>
     </div>
   );
 }
