@@ -161,6 +161,33 @@ export type DeletedRecord = {
   row: Record<string, any>;
 };
 
+export type NotificationRecord = {
+  id: string;
+  audience: 'admin' | 'tenant' | 'all';
+  user_id?: string | null;
+  tenant_id?: string | null;
+  property_id?: string | null;
+  type: string;
+  title: string;
+  body: string;
+  link_page?: string | null;
+  link_id?: string | null;
+  read_at?: string | null;
+  created_at: string;
+};
+
+export type NotificationPayload = {
+  audience?: 'admin' | 'tenant' | 'all';
+  user_id?: string | null;
+  tenant_id?: string | null;
+  property_id?: string | null;
+  type?: string;
+  title: string;
+  body: string;
+  link_page?: string | null;
+  link_id?: string | null;
+};
+
 export type ComplianceUpdate = {
   id: string;
   title: string;
@@ -222,6 +249,24 @@ export const api = {
     }),
 
   dashboard: () => request<DashboardData>('/dashboard'),
+
+  listNotifications: () => request<NotificationRecord[]>('/notifications'),
+
+  markNotificationRead: (id: string) =>
+    request<NotificationRecord>('/notifications/' + id + '/read', {
+      method: 'PATCH',
+    }),
+
+  markAllNotificationsRead: () =>
+    request<{ ok: boolean }>('/notifications/read-all', {
+      method: 'PATCH',
+    }),
+
+  createAdminNotification: (notification: NotificationPayload) =>
+    request<NotificationRecord>('/admin/notifications', {
+      method: 'POST',
+      body: JSON.stringify(notification),
+    }),
   complianceUpdates: () => request<ComplianceUpdate[]>('/compliance/updates'),
 
   createTicket: (

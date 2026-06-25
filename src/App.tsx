@@ -21,6 +21,8 @@ import type {
   AdminAccountPayload,
   LicenceKey,
   LicencePayload,
+  NotificationRecord,
+  NotificationPayload,
   DeletedRecord,
   ComplianceUpdate,
   DocumentPayload,
@@ -2915,51 +2917,158 @@ function LoginActivity() {
 }
 
 function NotificationCentre() {
+  const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
+  const [notificationError, setNotificationError] = useState('');
+  const [broadcast, setBroadcast] = useState<NotificationPayload>({
+    audience: 'tenant',
+    title: '',
+    body: '',
+    type: 'broadcast',
+    link_page: 'dashboard',
+  });
+
+  async function loadNotifications() {
+    setLoadingNotifications(true);
+    setNotificationError('');
+    try {
+      const rows = await api.listNotifications();
+      setNotifications(rows);
+    } catch (err) {
+      setNotificationError(err instanceof Error ? err.message : 'Could not load notifications');
+    } finally {
+      setLoadingNotifications(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadNotifications();
+  }, []);
+
+  const unreadCount = notifications.filter(notification => !notification.read_at).length;
+
+  async function markRead(notification: NotificationRecord) {
+    try {
+      const updated = await api.markNotificationRead(notification.id);
+      setNotifications(rows => rows.map(row => row.id === updated.id ? updated : row));
+    } catch (err) {
+      setNotificationError(err instanceof Error ? err.message : 'Could not mark notification read');
+    }
+  }
+
+  async function markAllRead() {
+    try {
+      await api.markAllNotificationsRead();
+      await loadNotifications();
+    } catch (err) {
+      setNotificationError(err instanceof Error ? err.message : 'Could not mark notifications read');
+    }
+  }
+
+  async function sendBroadcast(event: FormEvent) {
+    event.preventDefault();
+    setNotificationError('');
+
+    try {
+      await api.createAdminNotification({
+        ...broadcast,
+        title: String(broadcast.title || '').trim(),
+        body: String(broadcast.body || '').trim(),
+      });
+      setBroadcast({ audience: 'tenant', title: '', body: '', type: 'broadcast', link_page: 'dashboard' });
+      await loadNotifications();
+    } catch (err) {
+      setNotificationError(err instanceof Error ? err.message : 'Could not send notification');
+    }
+  }
+
   return (
     <div className="space-y-6">
-      <Card title="Notification centre">
-        <div className="grid gap-4 md:grid-cols-3">
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-            <p className="text-sm font-semibold text-emerald-950">In-app notifications</p>
-            <p className="mt-2 text-sm text-emerald-800">Safe first step. The app can show alerts inside PropManagerr when tenants upload documents, submit repairs or send messages.</p>
-            <p className="mt-3 rounded-lg bg-white/70 px-3 py-2 text-xs font-medium text-emerald-900">Recommended for v90</p>
-          </div>
-
-          <div className="rounded-xl border border-sky-200 bg-sky-50 p-4">
-            <p className="text-sm font-semibold text-sky-950">Free browser push</p>
-            <p className="mt-2 text-sm text-sky-800">Can be free using Web Push. Each admin or tenant must allow notifications on their own device/browser.</p>
-            <p className="mt-3 rounded-lg bg-white/70 px-3 py-2 text-xs font-medium text-sky-900">Recommended for v91</p>
-          </div>
-
-          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-            <p className="text-sm font-semibold text-amber-950">SMS / WhatsApp</p>
-            <p className="mt-2 text-sm text-amber-800">Useful later, but usually not free. Keep mobile numbers ready, but use free in-app/browser notifications first.</p>
-            <p className="mt-3 rounded-lg bg-white/70 px-3 py-2 text-xs font-medium text-amber-900">Later option</p>
-          </div>
+      {notificationError && (
+        <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+          {notificationError}
         </div>
+      )}
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Unread</p>
+          <p className="mt-2 text-3xl font-bold text-emerald-950">{unreadCount}</p>
+          <p className="text-sm text-emerald-800">Alerts needing attention</p>
+        </div>
+        <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-sky-700">Stored alerts</p>
+          <p className="mt-2 text-3xl font-bold text-sky-950">{notifications.length}</p>
+          <p className="text-sm text-sky-800">Latest 100 notification records</p>
+        </div>
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Browser push</p>
+          <p className="mt-2 text-lg font-bold text-amber-950">Next stage</p>
+          <p className="text-sm text-amber-800">v91 can add free Web Push opt-in per device.</p>
+        </div>
+      </div>
+
+      <Card title="Send tenant message">
+        <form onSubmit={sendBroadcast} className="grid gap-4 md:grid-cols-3">
+          <Select<'admin' | 'tenant' | 'all'> label="Send to" value={broadcast.audience || 'tenant'} onChange={value => setBroadcast({ ...broadcast, audience: value || 'tenant' })}>
+            <option value="tenant">All tenants</option>
+            <option value="admin">Admin only</option>
+            <option value="all">Everyone</option>
+          </Select>
+          <Input label="Title" value={fieldValue(broadcast.title)} onChange={value => setBroadcast({ ...broadcast, title: value })} required />
+          <Input label="Open page" value={fieldValue(broadcast.link_page)} onChange={value => setBroadcast({ ...broadcast, link_page: value || null })} />
+          <label className="block text-sm font-medium text-slate-700 md:col-span-3">
+            Message
+            <textarea
+              className="mt-1 min-h-24 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              value={broadcast.body || ''}
+              onChange={event => setBroadcast({ ...broadcast, body: event.target.value })}
+              required
+            />
+          </label>
+          <div className="md:col-span-3">
+            <Button type="submit">Send in-app notification</Button>
+          </div>
+        </form>
       </Card>
 
-      <Card title="Planned automatic alerts">
-        <div className="grid gap-3 md:grid-cols-2">
-          {[
-            ['Tenant upload', 'Notify admin when a tenant uploads a document or signed file.'],
-            ['Repair request', 'Notify admin when a tenant submits a new repair or message.'],
-            ['Admin broadcast', 'Send an in-app message to all tenants or selected property tenants.'],
-            ['Expiry reminders', 'Notify admin before EPC, gas safety, EICR or tenancy documents expire.'],
-          ].map(([title, body]) => (
-            <div key={title} className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
-              <p className="font-semibold text-slate-900">{title}</p>
-              <p className="mt-1 text-slate-600">{body}</p>
-            </div>
-          ))}
+      <Card title="Notification inbox">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm text-slate-600">
+            {loadingNotifications ? 'Loading notifications...' : unreadCount + ' unread notification' + (unreadCount === 1 ? '' : 's')}
+          </p>
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => void loadNotifications()}>Refresh</Button>
+            <Button variant="secondary" disabled={!unreadCount} onClick={() => void markAllRead()}>Mark all read</Button>
+          </div>
         </div>
-      </Card>
 
-      <Card title="Why this is staged">
-        <p className="text-sm text-slate-700">
-          Mobile numbers can be stored now, but free push notifications need browser permission, device subscriptions and a service worker.
-          Building this in stages keeps uploads, tenants and admin tools stable while we add alerts safely.
-        </p>
+        {notifications.length === 0 ? (
+          <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">No notifications yet.</p>
+        ) : (
+          <div className="space-y-3">
+            {notifications.map(notification => (
+              <div key={notification.id} className={'rounded-xl border p-4 ' + (notification.read_at ? 'border-slate-200 bg-white' : 'border-emerald-200 bg-emerald-50')}>
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <div className="mb-2 flex flex-wrap gap-2">
+                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">{notification.type}</span>
+                      <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">{notification.audience}</span>
+                      {!notification.read_at && <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-800">Unread</span>}
+                    </div>
+                    <p className="font-semibold text-slate-950">{notification.title}</p>
+                    <p className="mt-1 text-sm text-slate-700">{notification.body}</p>
+                    <p className="mt-2 text-xs text-slate-500">{new Date(notification.created_at).toLocaleString()}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {notification.link_page && <span className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">Page: {notification.link_page}</span>}
+                    {!notification.read_at && <Button variant="secondary" onClick={() => void markRead(notification)}>Mark read</Button>}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </Card>
     </div>
   );

@@ -482,7 +482,73 @@ async function recordLoginAudit(req, details) {
   }
 }
 
-app.get('/health', (_req, res) => res.json({ ok: true, app: 'PropManagerr API', version: 'v89' }));
+async function ensureNotificationsTable() {
+  await query(`
+    create table if not exists notifications (
+      id text primary key,
+      audience text not null default 'admin',
+      user_id text,
+      tenant_id text,
+      property_id text,
+      type text not null default 'info',
+      title text not null,
+      body text not null,
+      link_page text,
+      link_id text,
+      read_at timestamptz,
+      created_at timestamptz not null default now()
+    )
+  `);
+
+  await query('create index if not exists idx_notifications_created_at on notifications(created_at desc)');
+  await query('create index if not exists idx_notifications_audience on notifications(audience)');
+  await query('create index if not exists idx_notifications_user_id on notifications(user_id)');
+  await query('create index if not exists idx_notifications_tenant_id on notifications(tenant_id)');
+}
+
+ensureNotificationsTable().catch(error => {
+  console.error('Failed to initialise notifications table', error);
+});
+
+async function createNotification({
+  audience = 'admin',
+  user_id = null,
+  tenant_id = null,
+  property_id = null,
+  type = 'info',
+  title,
+  body,
+  link_page = null,
+  link_id = null,
+}) {
+  try {
+    await ensureNotificationsTable();
+    const { rows } = await query(
+      `insert into notifications
+        (id, audience, user_id, tenant_id, property_id, type, title, body, link_page, link_id)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       returning *`,
+      [
+        crypto.randomUUID(),
+        audience,
+        user_id,
+        tenant_id,
+        property_id,
+        type,
+        title,
+        body,
+        link_page,
+        link_id,
+      ]
+    );
+    return rows[0];
+  } catch (error) {
+    console.error('Failed to create notification', error);
+    return null;
+  }
+}
+
+app.get('/health', (_req, res) => res.json({ ok: true, app: 'PropManagerr API', version: 'v90' }));
 
 app.post('/auth/login', async (req, res) => {
   const { email, password } = req.body || {};
@@ -584,6 +650,112 @@ app.get('/admin/login-audit', requireAuth, requireAdmin, async (_req, res) => {
     console.error('Failed to load login audit', error);
     res.status(500).json({ error: 'Could not load login activity' });
   }
+});
+
+app.get('/notifications', requireAuth, async (req, res) => {
+  await ensureNotificationsTable();
+  const currentUser = await resolveTenantAccountLink(req.user);
+
+  if (currentUser.role === 'admin') {
+    const { rows } = await query(
+      `select * from notifications
+       where audience in ('admin', 'all') or user_id=$1
+       order by created_at desc
+       limit 100`,
+      [currentUser.id]
+    );
+    return res.json(rows);
+  }
+
+  const { rows } = await query(
+    `select * from notifications
+     where audience in ('tenant', 'all')
+       or user_id=$1
+       or tenant_id=$2
+     order by created_at desc
+     limit 100`,
+    [currentUser.id, currentUser.tenant_id || null]
+  );
+  res.json(rows);
+});
+
+app.patch('/notifications/:id/read', requireAuth, async (req, res) => {
+  await ensureNotificationsTable();
+  const currentUser = await resolveTenantAccountLink(req.user);
+
+  if (currentUser.role === 'admin') {
+    const { rows } = await query(
+      `update notifications
+       set read_at=coalesce(read_at, now())
+       where id=$1 and (audience in ('admin', 'all') or user_id=$2)
+       returning *`,
+      [req.params.id, currentUser.id]
+    );
+    return sendOneOr404(res, rows, 'Notification');
+  }
+
+  const { rows } = await query(
+    `update notifications
+     set read_at=coalesce(read_at, now())
+     where id=$1 and (audience in ('tenant', 'all') or user_id=$2 or tenant_id=$3)
+     returning *`,
+    [req.params.id, currentUser.id, currentUser.tenant_id || null]
+  );
+  sendOneOr404(res, rows, 'Notification');
+});
+
+app.patch('/notifications/read-all', requireAuth, async (req, res) => {
+  await ensureNotificationsTable();
+  const currentUser = await resolveTenantAccountLink(req.user);
+
+  if (currentUser.role === 'admin') {
+    await query(
+      `update notifications
+       set read_at=coalesce(read_at, now())
+       where read_at is null and (audience in ('admin', 'all') or user_id=$1)`,
+      [currentUser.id]
+    );
+    return res.json({ ok: true });
+  }
+
+  await query(
+    `update notifications
+     set read_at=coalesce(read_at, now())
+     where read_at is null and (audience in ('tenant', 'all') or user_id=$1 or tenant_id=$2)`,
+    [currentUser.id, currentUser.tenant_id || null]
+  );
+  res.json({ ok: true });
+});
+
+app.post('/admin/notifications', requireAuth, requireAdmin, async (req, res) => {
+  const {
+    audience = 'tenant',
+    user_id = null,
+    tenant_id = null,
+    property_id = null,
+    type = 'broadcast',
+    title,
+    body,
+    link_page = null,
+    link_id = null,
+  } = req.body || {};
+
+  if (!title || !body) return res.status(400).json({ error: 'Title and message are required' });
+  if (!['admin', 'tenant', 'all'].includes(audience)) return res.status(400).json({ error: 'Invalid notification audience' });
+
+  const notification = await createNotification({
+    audience,
+    user_id,
+    tenant_id,
+    property_id,
+    type,
+    title,
+    body,
+    link_page,
+    link_id,
+  });
+
+  res.status(201).json(notification);
 });
 
 app.get('/admin/accounts', requireAuth, requireAdmin, async (_req, res) => {
@@ -859,6 +1031,19 @@ app.post('/maintenance', requireAuth, async (req, res) => {
      values ($1,$2,$3,$4,$5,$6) returning *`,
     [title, description, property_id, tenantId, urgency, 'open']
   );
+  if (currentUser.role === 'tenant') {
+    await createNotification({
+      audience: 'admin',
+      tenant_id: tenantId,
+      property_id,
+      type: 'repair_request',
+      title: 'New repair request',
+      body: (currentUser.name || 'A tenant') + ' submitted: ' + title,
+      link_page: 'maintenance',
+      link_id: rows[0].id,
+    });
+  }
+
   res.status(201).json(rows[0]);
 });
 
