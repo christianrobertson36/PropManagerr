@@ -568,6 +568,14 @@ function Properties({ data, refresh }: { data: DashboardData; refresh: () => Pro
       <Input label="Bedrooms" type="number" value={fieldValue(form.bedrooms)} onChange={value => setForm({ ...form, bedrooms: Number(value) })} />
       <Input label="Property type" value={fieldValue(form.property_type)} onChange={value => setForm({ ...form, property_type: value })} />
 
+      {editing && (
+        <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700 md:col-span-3">
+          <p className="font-semibold text-rose-900">Danger zone</p>
+          <p className="mt-1">Delete this property from inside the edit panel only.</p>
+          <Button type="button" variant="danger" onClick={() => void remove(editing)}>Delete property</Button>
+        </div>
+      )}
+
       <Table
         columns={['Address', 'City', 'Postcode', 'Status', 'Rent', 'Actions']}
         rows={data.properties.map(property => [
@@ -1289,6 +1297,14 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
         <option value="overdue">Overdue</option>
       </Select>
 
+      {editing && (
+        <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700 md:col-span-3">
+          <p className="font-semibold text-rose-900">Danger zone</p>
+          <p className="mt-1">Delete this tenant from inside the edit panel only.</p>
+          <Button type="button" variant="danger" onClick={() => void remove(editing)}>Delete tenant</Button>
+        </div>
+      )}
+
       {previewAgreement && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
           <div className="max-h-[85vh] w-full max-w-4xl overflow-y-auto rounded-xl bg-white p-5 shadow-xl">
@@ -1559,7 +1575,8 @@ function Rent({ data, refresh, user }: { data: DashboardData; refresh: () => Pro
             </Select>
             <div className="flex items-end gap-2 md:col-span-2">
               <Button type="submit">Save</Button>
-              <Button variant="secondary" onClick={() => setEditing(null)}>Cancel</Button>
+              <Button type="button" variant="secondary" onClick={() => setEditing(null)}>Cancel</Button>
+              <Button type="button" variant="danger" onClick={() => void remove(editing)}>Delete payment</Button>
             </div>
           </form>
         </Card>
@@ -1750,7 +1767,8 @@ function Maintenance({ data, refresh, user }: { data: DashboardData; refresh: ()
             </label>
             <div className="flex items-end gap-2 md:col-span-3">
               <Button type="submit">Save repair</Button>
-              <Button variant="secondary" onClick={resetEdit}>Cancel</Button>
+              <Button type="button" variant="secondary" onClick={resetEdit}>Cancel</Button>
+              <Button type="button" variant="danger" onClick={() => void deleteTicket(editing)}>Delete repair</Button>
             </div>
           </form>
         </Card>
@@ -2255,7 +2273,8 @@ function Expenses({ data, refresh }: { data: DashboardData; refresh: () => Promi
           <Input label="Description" value={fieldValue(form.description)} onChange={value => setForm({ ...form, description: value })} />
           <div className="flex items-end gap-2">
             <Button type="submit">{editing ? 'Save changes' : 'Add expense'}</Button>
-            {editing && <Button variant="secondary" onClick={reset}>Cancel</Button>}
+            {editing && <Button type="button" variant="secondary" onClick={reset}>Cancel</Button>}
+            {editing && <Button type="button" variant="danger" onClick={() => void remove(editing)}>Delete expense</Button>}
           </div>
         </form>
       </Card>

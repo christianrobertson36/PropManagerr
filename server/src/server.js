@@ -469,7 +469,7 @@ async function recordLoginAudit(req, details) {
   }
 }
 
-app.get('/health', (_req, res) => res.json({ ok: true, app: 'PropManagerr API', version: 'v83' }));
+app.get('/health', (_req, res) => res.json({ ok: true, app: 'PropManagerr API', version: 'v84' }));
 
 app.post('/auth/login', async (req, res) => {
   const { email, password } = req.body || {};
