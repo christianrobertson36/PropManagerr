@@ -115,6 +115,7 @@ export function TenantPortal({ data, user, refresh }: { data: DashboardData; use
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [passwordNotice, setPasswordNotice] = useState('');
   const [passwordError, setPasswordError] = useState('');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   async function submitPasswordChange(event: React.FormEvent) {
     event.preventDefault();
