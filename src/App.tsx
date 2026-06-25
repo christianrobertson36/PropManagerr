@@ -2792,11 +2792,14 @@ function LoginActivity() {
   );
 }
 
+type AdminSection = 'overview' | 'accounts' | 'backup' | 'licences';
+
 function Admin({ data }: { data: DashboardData; refresh: () => Promise<void> }) {
   const [accounts, setAccounts] = useState<AdminAccount[]>([]);
   const [editing, setEditing] = useState<AdminAccount | null>(null);
   const [form, setForm] = useState<AdminAccountPayload>({ name: '', email: '', password: '', role: 'tenant', tenant_id: null, active: true });
   const [resettingPasswordId, setResettingPasswordId] = useState<string | null>(null);
+  const [adminSection, setAdminSection] = useState<AdminSection>('overview');
 
   async function loadAccounts() {
     const rows = await api.listAdminAccounts();
@@ -2846,49 +2849,89 @@ function Admin({ data }: { data: DashboardData; refresh: () => Promise<void> }) 
     }
   }
 
+  const adminSections: { id: AdminSection; label: string; helper: string }[] = [
+    { id: 'overview', label: 'Overview', helper: 'Safety checks and login activity' },
+    { id: 'accounts', label: 'Accounts', helper: 'Admin and tenant login accounts' },
+    { id: 'backup', label: 'Backup & trash', helper: 'Exports, restore and permanent delete' },
+    { id: 'licences', label: 'Licences', helper: 'Desktop licence keys' },
+  ];
+
+  const accountsPanel = (
+    <CrudLayout title={editing ? 'Edit login account' : 'Add login account'} onSubmit={submit} onCancel={reset} editing={Boolean(editing)}>
+      <Input label="Name" value={fieldValue(form.name)} onChange={value => setForm({ ...form, name: value })} required />
+      <Input label="Email" type="email" value={fieldValue(form.email)} onChange={value => setForm({ ...form, email: value })} required />
+      <Input label={editing ? 'New password (leave blank to keep)' : 'Password'} type="password" value={fieldValue(form.password)} onChange={value => setForm({ ...form, password: value })} required={!editing} />
+      <Select<'admin' | 'tenant'> label="Role" value={form.role || 'tenant'} onChange={value => setForm({ ...form, role: value || 'tenant' })}>
+        <option value="admin">Admin</option>
+        <option value="tenant">Tenant</option>
+      </Select>
+      <Select<string> label="Linked tenant" value={fieldValue(form.tenant_id)} onChange={value => setForm({ ...form, tenant_id: value || null })}>
+        <option value="">No tenant</option>
+        {data.tenants.map(tenant => <option key={tenant.id} value={tenant.id}>{tenant.name}</option>)}
+      </Select>
+
+      <Table
+        columns={['Name', 'Email', 'Role', 'Tenant', 'Active', 'Actions']}
+        rows={accounts.map(account => [
+          account.name,
+          account.email,
+          account.role,
+          account.tenant?.name || '-',
+          account.active ? 'Yes' : 'No',
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" onClick={() => startEdit(account)}>Edit</Button>
+            <Button variant="secondary" disabled={resettingPasswordId === account.id} onClick={() => void resetAccountPassword(account)}>
+              {resettingPasswordId === account.id ? 'Resetting...' : 'Reset password'}
+            </Button>
+          </div>,
+        ])}
+      />
+    </CrudLayout>
+  );
+
   return (
-    <div className="space-y-8">
-      <AdminSafetyChecks />
-      <LoginActivity />
-      <BackupExportTools />
-      <TrashBin />
+    <div className="space-y-6">
+      <Card title="Admin centre">
+        <div className="grid gap-3 md:grid-cols-4">
+          {adminSections.map(section => (
+            <button
+              key={section.id}
+              type="button"
+              onClick={() => setAdminSection(section.id)}
+              className={
+                'rounded-lg border p-3 text-left text-sm transition ' +
+                (adminSection === section.id
+                  ? 'border-emerald-300 bg-emerald-50 text-emerald-900'
+                  : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50')
+              }
+            >
+              <span className="block font-semibold">{section.label}</span>
+              <span className="mt-1 block text-xs text-slate-500">{section.helper}</span>
+            </button>
+          ))}
+        </div>
+      </Card>
 
-      <CrudLayout title={editing ? 'Edit login account' : 'Add login account'} onSubmit={submit} onCancel={reset} editing={Boolean(editing)}>
-        <Input label="Name" value={fieldValue(form.name)} onChange={value => setForm({ ...form, name: value })} required />
-        <Input label="Email" type="email" value={fieldValue(form.email)} onChange={value => setForm({ ...form, email: value })} required />
-        <Input label={editing ? 'New password (leave blank to keep)' : 'Password'} type="password" value={fieldValue(form.password)} onChange={value => setForm({ ...form, password: value })} required={!editing} />
-        <Select<'admin' | 'tenant'> label="Role" value={form.role || 'tenant'} onChange={value => setForm({ ...form, role: value || 'tenant' })}>
-          <option value="admin">Admin</option>
-          <option value="tenant">Tenant</option>
-        </Select>
-        <Select<string> label="Linked tenant" value={fieldValue(form.tenant_id)} onChange={value => setForm({ ...form, tenant_id: value || null })}>
-          <option value="">No tenant</option>
-          {data.tenants.map(tenant => <option key={tenant.id} value={tenant.id}>{tenant.name}</option>)}
-        </Select>
+      {adminSection === 'overview' && (
+        <div className="space-y-6">
+          <AdminSafetyChecks />
+          <LoginActivity />
+        </div>
+      )}
 
-        <Table
-          columns={['Name', 'Email', 'Role', 'Tenant', 'Active', 'Actions']}
-          rows={accounts.map(account => [
-            account.name,
-            account.email,
-            account.role,
-            account.tenant?.name || '-',
-            account.active ? 'Yes' : 'No',
-            <div className="flex flex-wrap gap-2">
-              <Button variant="secondary" onClick={() => startEdit(account)}>Edit</Button>
-              <Button variant="secondary" disabled={resettingPasswordId === account.id} onClick={() => void resetAccountPassword(account)}>
-                {resettingPasswordId === account.id ? 'Resetting...' : 'Reset password'}
-              </Button>
-            </div>,
-          ])}
-        />
-      </CrudLayout>
+      {adminSection === 'accounts' && accountsPanel}
 
-      <LicenceManagement />
+      {adminSection === 'backup' && (
+        <div className="space-y-6">
+          <BackupExportTools />
+          <TrashBin />
+        </div>
+      )}
+
+      {adminSection === 'licences' && <LicenceManagement />}
     </div>
   );
 }
-
 function CrudLayout({
   title,
   onSubmit,
