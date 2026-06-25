@@ -1288,7 +1288,7 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
       </Select>
       <Input label="Name" value={fieldValue(form.name)} onChange={value => setForm({ ...form, name: value })} required />
       <Input label="Email" value={fieldValue(form.email)} onChange={value => setForm({ ...form, email: value })} type="email" />
-      <Input label="Phone" value={fieldValue(form.phone)} onChange={value => setForm({ ...form, phone: value })} />
+      <Input label="Mobile number" value={fieldValue(form.phone)} onChange={value => setForm({ ...form, phone: value })} />
       <Input label="Lease start" value={fieldValue(form.lease_start)} onChange={value => setForm({ ...form, lease_start: value || null })} type="date" />
       <Input label="Lease end" value={fieldValue(form.lease_end)} onChange={value => setForm({ ...form, lease_end: value || null })} type="date" />
       <Select<PaymentStatus> label="Payment status" value={(form.payment_status as PaymentStatus) || 'pending'} onChange={value => setForm({ ...form, payment_status: value || 'pending' })}>
@@ -1458,7 +1458,8 @@ function Tenants({ data, refresh }: { data: DashboardData; refresh: () => Promis
                 <p className="text-xs uppercase tracking-wide text-slate-500">Tenant</p>
                 <p className="font-semibold text-slate-900">{selectedTenant.name}</p>
                 <p className="text-slate-600">{selectedTenant.email || 'No email saved'}</p>
-                <p className="text-slate-600">{selectedTenant.phone || 'No phone saved'}</p>
+                <p className="text-slate-600">{selectedTenant.phone || 'No mobile number saved'}</p>
+                <p className="mt-1 text-xs text-slate-500">Mobile number ready for alerts/SMS later. Free browser push will use device permission instead.</p>
               </div>
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
                 <p className="text-xs uppercase tracking-wide text-slate-500">Connected property</p>
@@ -2913,7 +2914,58 @@ function LoginActivity() {
   );
 }
 
-type AdminSection = 'overview' | 'accounts' | 'backup' | 'licences';
+function NotificationCentre() {
+  return (
+    <div className="space-y-6">
+      <Card title="Notification centre">
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+            <p className="text-sm font-semibold text-emerald-950">In-app notifications</p>
+            <p className="mt-2 text-sm text-emerald-800">Safe first step. The app can show alerts inside PropManagerr when tenants upload documents, submit repairs or send messages.</p>
+            <p className="mt-3 rounded-lg bg-white/70 px-3 py-2 text-xs font-medium text-emerald-900">Recommended for v90</p>
+          </div>
+
+          <div className="rounded-xl border border-sky-200 bg-sky-50 p-4">
+            <p className="text-sm font-semibold text-sky-950">Free browser push</p>
+            <p className="mt-2 text-sm text-sky-800">Can be free using Web Push. Each admin or tenant must allow notifications on their own device/browser.</p>
+            <p className="mt-3 rounded-lg bg-white/70 px-3 py-2 text-xs font-medium text-sky-900">Recommended for v91</p>
+          </div>
+
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+            <p className="text-sm font-semibold text-amber-950">SMS / WhatsApp</p>
+            <p className="mt-2 text-sm text-amber-800">Useful later, but usually not free. Keep mobile numbers ready, but use free in-app/browser notifications first.</p>
+            <p className="mt-3 rounded-lg bg-white/70 px-3 py-2 text-xs font-medium text-amber-900">Later option</p>
+          </div>
+        </div>
+      </Card>
+
+      <Card title="Planned automatic alerts">
+        <div className="grid gap-3 md:grid-cols-2">
+          {[
+            ['Tenant upload', 'Notify admin when a tenant uploads a document or signed file.'],
+            ['Repair request', 'Notify admin when a tenant submits a new repair or message.'],
+            ['Admin broadcast', 'Send an in-app message to all tenants or selected property tenants.'],
+            ['Expiry reminders', 'Notify admin before EPC, gas safety, EICR or tenancy documents expire.'],
+          ].map(([title, body]) => (
+            <div key={title} className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+              <p className="font-semibold text-slate-900">{title}</p>
+              <p className="mt-1 text-slate-600">{body}</p>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <Card title="Why this is staged">
+        <p className="text-sm text-slate-700">
+          Mobile numbers can be stored now, but free push notifications need browser permission, device subscriptions and a service worker.
+          Building this in stages keeps uploads, tenants and admin tools stable while we add alerts safely.
+        </p>
+      </Card>
+    </div>
+  );
+}
+
+type AdminSection = 'overview' | 'accounts' | 'backup' | 'licences' | 'notifications';
 
 function Admin({ data }: { data: DashboardData; refresh: () => Promise<void> }) {
   const [accounts, setAccounts] = useState<AdminAccount[]>([]);
@@ -2975,6 +3027,7 @@ function Admin({ data }: { data: DashboardData; refresh: () => Promise<void> }) 
     { id: 'accounts', label: 'Accounts', helper: 'Admin and tenant login accounts' },
     { id: 'backup', label: 'Backup & trash', helper: 'Exports, restore and permanent delete' },
     { id: 'licences', label: 'Licences', helper: 'Desktop licence keys' },
+    { id: 'notifications', label: 'Notifications', helper: 'Messages, alerts and free push plan' },
   ];
 
   const accountsPanel = (
@@ -3013,7 +3066,7 @@ function Admin({ data }: { data: DashboardData; refresh: () => Promise<void> }) 
   return (
     <div className="space-y-6">
       <Card title="Admin centre">
-        <div className="grid gap-3 md:grid-cols-4">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
           {adminSections.map(section => (
             <button
               key={section.id}
@@ -3050,6 +3103,8 @@ function Admin({ data }: { data: DashboardData; refresh: () => Promise<void> }) 
       )}
 
       {adminSection === 'licences' && <LicenceManagement />}
+
+      {adminSection === 'notifications' && <NotificationCentre />}
     </div>
   );
 }
