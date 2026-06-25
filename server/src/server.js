@@ -469,7 +469,7 @@ async function recordLoginAudit(req, details) {
   }
 }
 
-app.get('/health', (_req, res) => res.json({ ok: true, app: 'PropManagerr API', version: 'v78' }));
+app.get('/health', (_req, res) => res.json({ ok: true, app: 'PropManagerr API', version: 'v79' }));
 
 app.post('/auth/login', async (req, res) => {
   const { email, password } = req.body || {};
@@ -1318,7 +1318,8 @@ app.get('/documents', requireAuth, requireAdmin, async (_req, res) => {
 });
 
 app.post('/documents', requireAuth, async (req, res) => {
-  const currentUser = await resolveTenantAccountLink(req.user);
+  try {
+    const currentUser = await resolveTenantAccountLink(req.user);
   const body = req.body || {};
   let payload;
 
@@ -1328,7 +1329,7 @@ app.post('/documents', requireAuth, async (req, res) => {
     }
 
     const { rows: tenantRows } = await query(
-      'select id, property_id from tenants where id=$1 and deleted_at is null',
+      'select id, property_id from tenants where id=$1',
       [currentUser.tenant_id]
     );
     const tenant = tenantRows[0];
@@ -1354,6 +1355,10 @@ app.post('/documents', requireAuth, async (req, res) => {
     [payload.property_id, payload.tenant_id, payload.name, payload.doc_type, payload.expiry_date, payload.file_url]
   );
   res.status(201).json(rows[0]);
+  } catch (error) {
+    console.error('document create failed', error);
+    res.status(500).json({ error: 'Document could not be saved' });
+  }
 });
 app.patch('/documents/:id', requireAuth, requireAdmin, async (req, res) => {
   const payload = await normaliseDocumentPayload(req.body || {});
